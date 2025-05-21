@@ -6,7 +6,7 @@
 	url = https://github.com/Tencent/DepthCrafter.git
 [submodule "third-party/DELTA_densetrack3d/submodules/Grounded-SAM-2"]
 	path = third-party/DELTA_densetrack3d/submodules/Grounded-SAM-2
-	url = https://github.com/IDEA-Research/Grounded-SAM-2
+	url = https://github.com/IDEA-Research/Grounded-SAM-2.git
 [submodule "third-party/vggt"]
 	path = third-party/vggt
-	url = https://github.com/facebookresearch/vggt
+	url = https://github.com/facebookresearch/vggt.git
