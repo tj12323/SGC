@@ -87,14 +87,14 @@ evaluation_datasets/
 ├── k400-val/
 │   ├── cosmos/             \# Sub-category, model outputs, or specific split
 │   │   ├── images/
-│   │   │   ├── cosmos\_0001/ \# This could be a folder of frames or a single video file
+│   │   │   ├── cosmos_0001/ \# This could be a folder of frames or a single video file
 │   │   │   │   ├── 00000.jpg
 │   │   │   │   └── ...
-│   │   │   ├── cosmos\_0002/
+│   │   │   ├── cosmos_0002/
 │   │   │   └── ...
 │   ├── hotshot/
 │   │   ├── images/
-|   │   │   ├── hotshot\_0001/
+|   │   │   ├── hotshot_0001/
 |   │   │   └── ...
 │   ├── latte/
 │   │   └── ...

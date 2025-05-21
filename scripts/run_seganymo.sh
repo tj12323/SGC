@@ -4,7 +4,7 @@
 BASE_DIR="data/mygenvideo/k400-val"
 
 # GPUs to use
-GPUS=(0 1 2 3)
+GPUS=(2 3)
 
 # Names of directories to skip
 SKIP_DIRS=("real_video")
