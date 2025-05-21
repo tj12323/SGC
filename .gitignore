@@ -3,3 +3,7 @@ third-party/SegAnyMo/result/
 third-party/SegAnyMo/checkpoints/
 third-party/DELTA_densetrack3d/checkpoints/
 third-party/Video-Depth-Anything/checkpoints/
+third-party/SegAnyMo/sam2/checkpoints/sam2_hiera_large.pt
+result/
+logs_*
+check/

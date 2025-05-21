@@ -30,7 +30,7 @@ vis: False
 
 # model
 model_name: "traj_oa_depth"
-resume_path: "checkpoints/moseg.pth"
+resume_path: "third-party/SegAnyMo/checkpoints/moseg.pth"
 tracks: True
 depths: True
 extra_info: True

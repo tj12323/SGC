@@ -57,11 +57,6 @@ SegAnyMo is used for motion segmentation.
 ```bash
 cd third-party/SegAnyMo
 pip install -r requirements.txt
-
-# Setup DINOv2 (for preprocessing)
-cd preproc
-git clone https://github.com/facebookresearch/dinov2
-cd .. # Back to third-party/SegAnyMo
 ```
 
 **B. Install SAM2 (Sub-component of SegAnyMo):**

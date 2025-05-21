@@ -4,7 +4,7 @@
 BASE_DIR="data/mygenvideo/k400-val"
 
 # GPUs to use
-GPUS=(2 3)
+GPUS=(0 1 2 3)
 
 # Names of directories to skip
 SKIP_DIRS=("real_video")
@@ -51,7 +51,7 @@ for video_dir in "$BASE_DIR"/*/; do
     --depth_model video-depth-anything \
     --step 10
   
-  python core/utils/run_inference.py \
+  python third-party/SegAnyMo/core/utils/run_inference.py \
     --video_path "$video_path" \
     --sam2dir "./third-party/SegAnyMo/result/sam2/$dir_name" \
     --motin_seg_dir "./third-party/SegAnyMo/result/moseg_delta/$dir_name" \

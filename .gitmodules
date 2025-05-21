@@ -10,3 +10,6 @@
 [submodule "third-party/vggt"]
 	path = third-party/vggt
 	url = https://github.com/facebookresearch/vggt.git
+[submodule "third-party/SegAnyMo/preproc/dinov2"]
+	path = third-party/SegAnyMo/preproc/dinov2
+	url = https://github.com/facebookresearch/dinov2.git
