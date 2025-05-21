@@ -1,0 +1,12 @@
+[submodule "third-party/DELTA_densetrack3d/submodules/UniDepth"]
+	path = third-party/DELTA_densetrack3d/submodules/UniDepth
+	url = https://github.com/lpiccinelli-eth/UniDepth.git
+[submodule "third-party/DELTA_densetrack3d/submodules/DepthCrafter"]
+	path = third-party/DELTA_densetrack3d/submodules/DepthCrafter
+	url = https://github.com/Tencent/DepthCrafter.git
+[submodule "third-party/DELTA_densetrack3d/submodules/Grounded-SAM-2"]
+	path = third-party/DELTA_densetrack3d/submodules/Grounded-SAM-2
+	url = https://github.com/IDEA-Research/Grounded-SAM-2
+[submodule "third-party/vggt"]
+	path = third-party/vggt
+	url = https://github.com/facebookresearch/vggt
