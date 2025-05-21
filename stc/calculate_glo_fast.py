@@ -14,6 +14,7 @@ from functools import partial
 import pdb
 import datetime
 import math # Added for isnan
+import re
 
 import torch
 from vggt.models.vggt import VGGT
@@ -947,7 +948,35 @@ def warp_depth(depth_prev, K_prev, K_curr, pose_curr_from_prev, depth_curr_shape
 
     return depth_warped
 
+# 在文件顶部引入这两个常量（与 compute_video_score 保持一致）
+METRIC_KEYS = [
+    'average_local_rotation_variance',
+    'average_local_translation_variance',
+    'average_reprojection_error',
+    'average_global_rotation_variance',
+    'average_global_translation_variance',
+    'average_depth_consistency_error',
+]
 
+def parse_summary_file(summary_path):
+    """
+    与前面相同：从 summary txt 文件中提取 normalization parameters 和 PCA weights
+    """
+    with open(summary_path, 'r') as f:
+        text = f.read()
+    norm_match = re.search(
+        r"--- Normalization Parameters Used .*?---\n\s*(\{.*?\})\n\n",
+        text, flags=re.S
+    )
+    weight_match = re.search(
+        r"--- PCA-Derived Weights .*?Calculated PCA Weights:\s*(\{.*?\})\n",
+        text, flags=re.S
+    )
+    if not norm_match or not weight_match:
+        raise ValueError("无法在 summary 文件中找到所需的 JSON 块，请检查格式。")
+    norm_params = json.loads(norm_match.group(1))
+    pca_weights = json.loads(weight_match.group(1))
+    return norm_params, pca_weights
 # --- Main Processing Function (MODIFIED) ---
 
 def evaluate_3d_consistency(args):
@@ -1434,7 +1463,206 @@ def evaluate_3d_consistency(args):
             global_rot_var, global_trans_var = calculate_variance_vs_reference_pose(
                 sub_area_poses, reference_pose_vggt
             )
-            # --- End of NEW helper function call ---
+
+            # --- 新增: 找到全局一致性中与 reference_pose_vggt 差距最大的区域 ---
+            # outlier_global_seg = None
+            # max_global_diff = -1.0
+            # if reference_pose_vggt is not None:
+            #     R_ref, t_ref = reference_pose_vggt
+            #     for seg_id, (R_i, t_i) in sub_area_poses.items():
+            #         angle = angular_distance(R_ref, R_i)
+            #         t_dist = np.linalg.norm(t_i - t_ref)
+            #         diff = angle + t_dist
+            #         if diff > max_global_diff:
+            #             max_global_diff = diff
+            #             outlier_global_seg = seg_id
+            # vis_dir = os.path.join("vis", args.video_name)
+            # os.makedirs(vis_dir, exist_ok=True)
+            # # 读取原始帧图像
+            # orig_img = cv2.imread(os.path.join(args.frames_dir, frame_files[i]))
+            # orig_img = static_frame
+            # overlay = orig_img.copy()
+            # # 本地异常区域轮廓: 红色
+            # if outlier_local_seg is not None:
+            #     mask_local = (current_data['sub_area_segments'] == outlier_local_seg).astype(np.uint8)
+            #     contours, _ = cv2.findContours(mask_local, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            #     cv2.drawContours(overlay, contours, -1, (0,0,255), 2)
+            # # 全局异常区域轮廓: 绿色
+            # # if outlier_global_seg is not None:
+            # #     mask_global = (current_data['sub_area_segments'] == outlier_global_seg).astype(np.uint8)
+            # #     contours, _ = cv2.findContours(mask_global, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            # #     cv2.drawContours(overlay, contours, -1, (0,255,0), 2)
+            # # 保存可视化结果
+            # out_path = os.path.join(vis_dir, f"pair_{i-1}_{i}_outliers.png")
+            # cv2.imwrite(out_path, overlay)
+            # logging.info(f"Saved outlier visualization: {out_path}")
+            
+            # --- MODIFIED VISUALIZATION: Poses with Segments Overlay ---
+            # 1. Create base image with segment overlay (similar to _segments_overlay.png)
+            vis_img_with_overlay = static_frame.copy() # Start with the static frame of current frame 'i'
+            num_curr_segments = current_data.get('num_segments', 0)
+            curr_sub_area_segments = current_data.get('sub_area_segments', None)
+
+            if num_curr_segments > 0 and curr_sub_area_segments is not None:
+                # Normalize segment IDs for colormap application
+                # Using the same normalization as in the earlier segment debug visualization
+                seg_norm = ((curr_sub_area_segments.astype(np.float32) / num_curr_segments) * 255).astype(np.uint8)
+                seg_colormap = cv2.applyColorMap(seg_norm, cv2.COLORMAP_JET)
+                
+                # Make non-segmented areas (ID 0) black in the colormap
+                seg_colormap[curr_sub_area_segments == 0] = [0, 0, 0]
+                
+                # Blend static frame with segment colormap
+                alpha_segments = 0.3 # Transparency for segment colors (same as debug)
+                vis_img_with_overlay = cv2.addWeighted(
+                    static_frame,             # Source image 1 (current static frame)
+                    1.0,                      # Weight for source image 1
+                    seg_colormap,             # Source image 2 (segment colors)
+                    alpha_segments,           # Weight for source image 2 (making it semi-transparent)
+                    0                         # Gamma value
+                )
+            # else: vis_img_with_overlay remains a copy of static_frame if no segments
+
+            # # 2. Prepare for drawing arrows on this new base image
+            # vis_img = vis_img_with_overlay # All arrows will be drawn on this image
+            # h, w = vis_img.shape[:2]
+            # K_curr = current_data['K'] # Intrinsics for the current frame 'i'
+
+            # # 3. Draw Global Reference Vector (Green Arrow) - Logic Unchanged
+            # # (Uses reference_pose_vggt: R_ref, t_ref)
+            # R_ref_viz, t_ref_viz = reference_pose_vggt
+            # # axis3d_viz should be defined, e.g.:
+            # axis3d_viz = np.array([[0,0,0], [1,1,1]/np.sqrt(3)], dtype=np.float32) 
+            # rvec_ref_viz, _ = cv2.Rodrigues(R_ref_viz)
+            # tvec_ref_viz = t_ref_viz.reshape(3,1)
+
+            # MAX_DISPLAY_LENGTH_PX = 75.0
+            # PERCENTILE_FOR_SCALING = 80  # 使用第90个百分位数
+            # MIN_ARROW_COUNT_FOR_PERCENTILE = 10 # 计算百分位数的最小样本数
+            # epsilon = 1e-6
+
+            # arrow_data_for_drawing = []
+            # all_original_lengths = [] # 存储所有有效的原始箭头长度
+
+            # # --- PASS 1: 计算所有原始投影向量并收集有效长度 ---
+
+            # # 1a. 全局参考位姿
+            # anchor_global_x = w // 2
+            # anchor_global_y = h // 2
+            # rvec_ref_viz, _ = cv2.Rodrigues(R_ref_viz)
+            # tvec_ref_viz_reshaped = t_ref_viz.reshape(3,1)
+
+            # pts2d_ref_obj, _ = cv2.projectPoints(axis3d_viz, rvec_ref_viz, tvec_ref_viz_reshaped, K_curr, None)
+            # p0_ref_proj = pts2d_ref_obj[0].ravel()
+            # p1_ref_proj = pts2d_ref_obj[1].ravel()
+            # v_ref_proj_x_orig = p1_ref_proj[0] - p0_ref_proj[0]
+            # v_ref_proj_y_orig = p1_ref_proj[1] - p0_ref_proj[1]
+            
+            # current_length = math.sqrt(v_ref_proj_x_orig**2 + v_ref_proj_y_orig**2)
+            # if current_length > epsilon: # 只收集有效长度
+            #     all_original_lengths.append(current_length)
+            
+            # arrow_data_for_drawing.append({
+            #     'vx_orig': v_ref_proj_x_orig, 'vy_orig': v_ref_proj_y_orig,
+            #     'anchor_x': anchor_global_x, 'anchor_y': anchor_global_y,
+            #     'color': (237,34,37), 'thickness': 4, 'tipLength': 0.1
+            # })
+
+            # # 1b. 局部子区域位姿
+            # seg_map_for_centroids = current_data['sub_area_segments']
+            # for seg_id, (R_i_viz, t_i_viz) in sub_area_poses.items():
+            #     if seg_id == 0: continue
+            #     mask_viz = (seg_map_for_centroids == seg_id).astype(np.uint8)
+            #     M_viz = cv2.moments(mask_viz)
+            #     if M_viz['m00'] < epsilon: continue
+                
+            #     cx_viz = int(M_viz['m10'] / M_viz['m00'])
+            #     cy_viz = int(M_viz['m01'] / M_viz['m00'])
+                
+            #     rvec_i_viz, _ = cv2.Rodrigues(R_i_viz)
+            #     tvec_i_viz_reshaped = t_i_viz.reshape(3,1)
+                
+            #     pts2d_i_obj, _ = cv2.projectPoints(axis3d_viz, rvec_i_viz, tvec_i_viz_reshaped, K_curr, None)
+            #     p0_proj = pts2d_i_obj[0].ravel()
+            #     p1_proj = pts2d_i_obj[1].ravel()
+            #     v_proj_x_orig = p1_proj[0] - p0_proj[0]
+            #     v_proj_y_orig = p1_proj[1] - p0_proj[1]
+                
+            #     current_length = math.sqrt(v_proj_x_orig**2 + v_proj_y_orig**2)
+            #     if current_length > epsilon: # 只收集有效长度
+            #         all_original_lengths.append(current_length)
+                
+            #     arrow_data_for_drawing.append({
+            #         'vx_orig': v_proj_x_orig, 'vy_orig': v_proj_y_orig,
+            #         'anchor_x': cx_viz, 'anchor_y': cy_viz,
+            #         'color': (147,200,192), 'thickness': 4, 'tipLength': 0.1
+            #     })
+
+            # # --- 计算稳健的参考长度和通用缩放因子 ---
+            # common_scale = 0.0 
+            # reference_length_for_scaling = 0.0
+
+            # if len(all_original_lengths) > 0:
+            #     # 注意：np.percentile 需要输入是numpy array
+            #     np_lengths = np.array(all_original_lengths)
+
+            #     if len(np_lengths) >= MIN_ARROW_COUNT_FOR_PERCENTILE:
+            #         reference_length_for_scaling = np.percentile(np_lengths, PERCENTILE_FOR_SCALING)
+            #     else:
+            #         # 如果箭头数量太少，使用最大值作为回退方案
+            #         reference_length_for_scaling = np.max(np_lengths)
+                
+            #     if reference_length_for_scaling > epsilon:
+            #         common_scale = MAX_DISPLAY_LENGTH_PX / reference_length_for_scaling
+            #     # 如果 reference_length_for_scaling 依然接近0 (例如，所有长度都非常小)
+            #     # common_scale 会非常大或保持为0。若要避免过大，可加条件：
+            #     # common_scale = min(common_scale, SOME_MAX_ACCEPTABLE_SCALE_UP_FACTOR)
+            #     # 但通常，如果P90都很小，说明整体pose变化不大，按比例放大是合理的。
+            
+            # # 调试打印 (可以按需保留或移除)
+            # # num_total_arrows = len(arrow_data_for_drawing)
+            # # print(f"Pair ({i-1}-{i}): Total arrows: {num_total_arrows}, Valid lengths collected: {len(all_original_lengths)}")
+            # # if len(all_original_lengths) > 0:
+            # #     print(f"  Lengths stats: Min={np.min(all_original_lengths):.2f}, Max={np.max(all_original_lengths):.2f}, P{PERCENTILE_FOR_SCALING}={np.percentile(np.array(all_original_lengths), PERCENTILE_FOR_SCALING):.2f if len(all_original_lengths) >= MIN_ARROW_COUNT_FOR_PERCENTILE else 'N/A'}")
+            # # print(f"  Reference length for scaling: {reference_length_for_scaling:.2f}, Common_scale: {common_scale:.4f}")
+
+
+            # # --- PASS 2: 使用 common_scale 绘制所有箭头 ---
+            # for arrow_data in arrow_data_for_drawing:
+            #     vx_scaled = arrow_data['vx_orig'] * common_scale
+            #     vy_scaled = arrow_data['vy_orig'] * common_scale
+                
+            #     anchor_x = arrow_data['anchor_x']
+            #     anchor_y = arrow_data['anchor_y']
+                
+            #     # 计算箭头的起点和终点，使其中心位于锚点
+            #     arrow_start_x = int(round(anchor_x - vx_scaled / 2.0))
+            #     arrow_start_y = int(round(anchor_y - vy_scaled / 2.0))
+            #     arrow_end_x   = int(round(anchor_x + vx_scaled / 2.0))
+            #     arrow_end_y   = int(round(anchor_y + vy_scaled / 2.0))
+                
+            #     # 只有当缩放后的箭头有可见长度时才绘制
+            #     # （或者如果原始向量非零但缩放后变得很小，画一个点）
+            #     if abs(vx_scaled) > epsilon or abs(vy_scaled) > epsilon : # 检查缩放后的向量是否几乎为零
+            #             cv2.arrowedLine(vis_img,
+            #                         (arrow_start_x, arrow_start_y),
+            #                         (arrow_end_x, arrow_end_y),
+            #                         arrow_data['color'], 
+            #                         arrow_data['thickness'], 
+            #                         tipLength=arrow_data['tipLength'])
+            #     # 可选：如果原始向量非零，但缩放后长度为0，可以在锚点画个小点
+            #     elif math.sqrt(arrow_data['vx_orig']**2 + arrow_data['vy_orig']**2) > epsilon :
+            #         cv2.circle(vis_img, (anchor_x, anchor_y), arrow_data['thickness'], arrow_data['color'], -1)           
+
+
+            # # 5. Save the combined visualization
+            # vis_dir = os.path.join("vis", args.video_name)
+            # os.makedirs(vis_dir, exist_ok=True)
+            # # Changed filename to reflect the new content
+            # out_path = os.path.join(vis_dir, f"pair_{i-1}_{i}_poses_with_segments_visualization.png")
+            # cv2.imwrite(out_path, vis_img)
+            # logging.info(f"Saved poses with segments visualization: {out_path}")
+            # # --- End of MODIFIED VISUALIZATION ---
 
         else:
             logging.warning(f"Pair ({i-1}, {i}): Failed to calculate relative pose from VGGT. Cannot calculate global variance.")
@@ -1446,41 +1674,185 @@ def evaluate_3d_consistency(args):
         logging.log(log_level_global, f"Pair ({i-1}, {i}): Global Consistency vs VGGT: R Var={global_rot_var:.4f} (deg^2), T Var={global_trans_var:.4f}")
 
 
-        # 6. Quantify: Reprojection Error (Using Local Poses - Unchanged Logic)
-        frame_reproj_errors_list = []
-        points_prev_for_reproj = tracks_for_pnp['points_prev']
-        points_curr_for_reproj = tracks_for_pnp['points_curr']
-        points_3d_prev_reproj, _, valid_mask_reproj = get_3d_points(points_prev_for_reproj, prev_data['depth'], K_prev)
-        avg_reproj_error_pair = np.nan
-        if points_3d_prev_reproj.shape[0] > 0 and num_estimated_poses > 0:
-            points_2d_curr_actual_reproj = points_curr_for_reproj[valid_mask_reproj]
-            valid_reproj_errors_seg = []
-            for seg_id, pose in sub_area_poses.items():
-                reproj_err = calculate_reprojection_error(
-                    points_3d_prev_reproj, points_2d_curr_actual_reproj, pose, K_curr,
-                    current_data['sub_area_segments'], seg_id, None # distCoeffs
-                )
-                if np.isfinite(reproj_err):
-                    valid_reproj_errors_seg.append(reproj_err)
-            # Example using the existing trim_outliers_iqr
-            # Assuming valid_reproj_errors_seg is a list or 1D numpy array
-            if valid_reproj_errors_seg:
-                trimmed_errors = trim_outliers_iqr(np.array(valid_reproj_errors_seg), cov=98) # e.g., keep 97.5%
-                if trimmed_errors.size > 0:
-                    avg_reproj_error_pair = np.mean(trimmed_errors)
-                else: # All errors were trimmed or original list was empty after trimming
-                    avg_reproj_error_pair = np.mean(valid_reproj_errors_seg) # Fallback to original mean if trimming removed everything
-            else:
-                avg_reproj_error_pair = np.nan
-            # avg_reproj_error_pair = np.mean(valid_reproj_errors_seg) if valid_reproj_errors_seg else np.nan
+        # --- START: 6. Quantify AND Visualize Reprojection Error ---
+        reproj_vis_output_dir = 'vis'
+        # Uses local poses (sub_area_poses)
+
+        # points_prev_for_reproj are from tracks_for_pnp['points_prev']
+        # points_curr_for_reproj are from tracks_for_pnp['points_curr']
+        # These are already filtered by track confidence and visibility in current frame.
+
+        # K_prev is prev_data['K'], K_curr is current_data['K']
+        
+        # Get 3D points in frame f_i-1 using its depth map for *all valid tracks in the pair*
+        # The `tracks_for_pnp` already contains filtered points_prev and points_curr
+        points_3d_prev_all_tracks, _, valid_mask_3d_prev = get_3d_points(
+            tracks_for_pnp['points_prev'], prev_data['depth'], K_prev
+        )
+        # points_3d_prev_all_tracks corresponds to tracks_for_pnp['points_prev'][valid_mask_3d_prev]
+        # The 2D points in current frame for these are tracks_for_pnp['points_curr'][valid_mask_3d_prev]
+
+        avg_reproj_error_pair_val = np.nan # Renamed to avoid conflict with a list
+        all_segment_reproj_errors_dict = {} # To store avg error per segment for color-coding and pair average
+
+        # Base image for this pair's reprojection visualization: current static frame f_i
+        # Create a clean copy for each pair's visualization if args.debug_vis_interval matches
+        vis_image_reproj_pair = None
+        vis_image_reproj_pair = vis_img_with_overlay.copy()
+        h_img_reproj, w_img_reproj = vis_image_reproj_pair.shape[:2]
+
+        # Visualization parameters
+        actual_pt_color = (0, 255, 0)   # Green circles for actual points p_i
+        reproj_pt_color = (0, 0, 255)    # Red 'x' for reprojected points Pi()
+        error_line_color = (255, 255, 0)   # Cyan lines for error
+        line_thickness_reproj = 1
+        marker_size_circle_reproj = 3
+        marker_size_cross_reproj = 4 # For cv2.drawMarker, size is more like radius
+
+        # Data for overall pair visualization (collecting all points and lines for THIS pair)
+        # These will be drawn if visualization is active for this pair
+        actual_points_to_draw_on_pair_img = []
+        reprojected_points_to_draw_on_pair_img = []
+        error_lines_to_draw_on_pair_img = []
+        
+        # For calculating the average reprojection error for the pair (from valid segment errors)
+        valid_segment_avg_errors_for_pair = []
+
+        if points_3d_prev_all_tracks.shape[0] > 0 and num_estimated_poses > 0:
+            # These are the 2D points in frame f_i that correspond to the valid 3D points from f_i-1
+            points_2d_curr_actual_for_3d_prev = tracks_for_pnp['points_curr'][valid_mask_3d_prev]
+
+            for seg_id, pose_local_curr_prev in sub_area_poses.items():
+                if seg_id == 0: # Skip background or invalid segment ID
+                    all_segment_reproj_errors_dict[seg_id] = np.nan
+                    continue
+
+                R_local_reproj, t_local_reproj = pose_local_curr_prev # This is P_curr_prev_local_j
+
+                # Identify tracks (among points_2d_curr_actual_for_3d_prev) that fall into this seg_id
+                # The segmentation is current_data['sub_area_segments']
+                # The points are current_data points: points_2d_curr_actual_for_3d_prev
+                
+                indices_in_segment = []
+                for idx_pt, pt_curr_track in enumerate(points_2d_curr_actual_for_3d_prev):
+                    x_coord, y_coord = int(round(pt_curr_track[0])), int(round(pt_curr_track[1]))
+                    # Check bounds before accessing segment map
+                    if 0 <= y_coord < current_data['sub_area_segments'].shape[0] and \
+                       0 <= x_coord < current_data['sub_area_segments'].shape[1]:
+                        if current_data['sub_area_segments'][y_coord, x_coord] == seg_id:
+                            indices_in_segment.append(idx_pt)
+                
+                if not indices_in_segment:
+                    all_segment_reproj_errors_dict[seg_id] = np.nan
+                    continue
+
+                # Actual 2D points in f_i for this segment
+                p_i_m_segment = points_2d_curr_actual_for_3d_prev[indices_in_segment]
+                # Corresponding 3D points from f_i-1 for this segment
+                P_i_minus_1_m_segment = points_3d_prev_all_tracks[indices_in_segment]
+
+                if P_i_minus_1_m_segment.shape[0] == 0:
+                    all_segment_reproj_errors_dict[seg_id] = np.nan
+                    continue
+                
+                # Project P_i_minus_1_m_segment into f_i using K_curr and pose_local_curr_prev
+                if R_local_reproj is not None and t_local_reproj is not None and K_curr is not None:
+                    rvec_local_reproj, _ = cv2.Rodrigues(R_local_reproj)
+                    
+                    # Ensure P_i_minus_1_m_segment is float32 for projectPoints
+                    P_i_minus_1_m_segment_f32 = P_i_minus_1_m_segment.astype(np.float32)
+
+                    projected_Pi_curr_segment, _ = cv2.projectPoints(
+                        P_i_minus_1_m_segment_f32, # Object points (3D from f_i-1)
+                        rvec_local_reproj,         # Rotation vector of local pose
+                        t_local_reproj,            # Translation vector of local pose
+                        K_curr,                    # Camera matrix of f_i
+                        None                       # Distortion coefficients (None)
+                    )
+                    # projected_Pi_curr_segment shape is (N, 1, 2), reshape to (N, 2)
+                    projected_Pi_curr_segment = projected_Pi_curr_segment.reshape(-1, 2)
+
+                    # Calculate reprojection error for these points (L2 norm)
+                    # errors_px_segment = || p_i_m_segment - projected_Pi_curr_segment ||
+                    errors_px_segment = np.linalg.norm(p_i_m_segment - projected_Pi_curr_segment, axis=1)
+                    
+                    avg_err_current_segment = np.mean(errors_px_segment) if errors_px_segment.size > 0 else np.nan
+                    all_segment_reproj_errors_dict[seg_id] = avg_err_current_segment
+                    
+                    if not np.isnan(avg_err_current_segment):
+                        valid_segment_avg_errors_for_pair.append(avg_err_current_segment)
+
+                    # If visualization is active for this pair, collect points and lines for drawing
+                    if vis_image_reproj_pair is not None:
+                        for pt_actual, pt_reprojected in zip(p_i_m_segment, projected_Pi_curr_segment):
+                            actual_points_to_draw_on_pair_img.append(pt_actual)
+                            reprojected_points_to_draw_on_pair_img.append(pt_reprojected)
+                            error_lines_to_draw_on_pair_img.append({'p1': pt_actual, 'p2': pt_reprojected})
+                else: # R_local_reproj or t_local_reproj or K_curr is None
+                    all_segment_reproj_errors_dict[seg_id] = np.nan
+            # End of loop for seg_id in sub_area_poses
+
+            # --- Visualization drawing for the current PAIR (if active) ---
+            if vis_image_reproj_pair is not None:
+                # 1. (Optional) Color-code segments by their average reprojection error
+                overlay_reproj_color = vis_image_reproj_pair.copy()
+                if all_segment_reproj_errors_dict:
+                    valid_errors_for_colormap = [e for e in all_segment_reproj_errors_dict.values() if np.isfinite(e)]
+                    if valid_errors_for_colormap:
+                        min_err_val_cm = min(valid_errors_for_colormap)
+                        max_err_val_cm = max(valid_errors_for_colormap)
+                        if max_err_val_cm == min_err_val_cm : max_err_val_cm = min_err_val_cm + 0.1 # Avoid div by zero
+
+                        for seg_id_vis, avg_err_s_vis in all_segment_reproj_errors_dict.items():
+                            if np.isfinite(avg_err_s_vis) and seg_id_vis > 0:
+                                norm_err_cm = (avg_err_s_vis - min_err_val_cm) / (max_err_val_cm - min_err_val_cm + 1e-6)
+                                norm_err_cm = np.clip(norm_err_cm, 0, 1)
+                                
+                                # Color: Green (low error) to Red (high error)
+                                seg_color_reproj = (int(255 * norm_err_cm * 0.5), int(255 * (1 - norm_err_cm)), 0) # BGR - Reddish for high, greenish for low
+                                
+                                mask_s_vis = (current_data['sub_area_segments'] == seg_id_vis)
+                                overlay_reproj_color[mask_s_vis] = seg_color_reproj
+                
+                alpha_reproj_overlay = 0.35 # Transparency for segment color overlay
+                vis_image_reproj_pair = cv2.addWeighted(overlay_reproj_color, alpha_reproj_overlay, vis_image_reproj_pair, 1 - alpha_reproj_overlay, 0)
+
+                # 2. Draw error lines
+                for line_data in error_lines_to_draw_on_pair_img:
+                    p1 = tuple(np.round(line_data['p1']).astype(int))
+                    p2 = tuple(np.round(line_data['p2']).astype(int))
+                    cv2.line(vis_image_reproj_pair, p1, p2, error_line_color, line_thickness_reproj)
+
+                # 3. Draw actual 2D feature points (p_i) - circles
+                for pt_a in actual_points_to_draw_on_pair_img:
+                    center_a = tuple(np.round(pt_a).astype(int))
+                    cv2.circle(vis_image_reproj_pair, center_a, marker_size_circle_reproj, actual_pt_color, -1)
+
+                # 4. Draw reprojected points (Pi) - 'x's
+                for pt_r in reprojected_points_to_draw_on_pair_img:
+                    x_r, y_r = np.round(pt_r).astype(int)
+                    cv2.drawMarker(vis_image_reproj_pair, (x_r, y_r), reproj_pt_color, 
+                                   markerType=cv2.MARKER_CROSS, markerSize=marker_size_cross_reproj*2, thickness=line_thickness_reproj)
+                
+                # 6. Save the visualization for the pair
+                prev_basename_vis = prev_data['frame_basename']
+                curr_basename_vis = current_data['frame_basename']
+                reproj_vis_filename = f"reproj_err_pair_{prev_basename_vis}_to_{curr_basename_vis}.png"
+                reproj_vis_path = os.path.join(reproj_vis_output_dir,args.video_name,reproj_vis_filename) # Use new dir
+                try:
+                    cv2.imwrite(reproj_vis_path, vis_image_reproj_pair)
+                    logging.info(f"Saved reprojection error visualization: {reproj_vis_path}")
+                except Exception as e_write_reproj:
+                    logging.error(f"Failed to write reprojection visualization {reproj_vis_path}: {e_write_reproj}")
+            # End of visualization drawing for the pair
         else:
-            if points_3d_prev_reproj.shape[0] == 0: logging.debug("No valid 3D points for reprojection.")
+            if points_3d_prev_all_tracks.shape[0] == 0: logging.debug("No valid 3D points for reprojection.")
             if num_estimated_poses == 0: logging.debug("No estimated poses for reprojection.")
 
-        all_results['frame_reprojection_errors'].append(avg_reproj_error_pair)
-        log_level_reproj = logging.INFO if np.isfinite(avg_reproj_error_pair) else logging.WARNING
-        logging.log(log_level_reproj, f"Pair ({i-1}, {i}): Avg Local Reprojection Error: {avg_reproj_error_pair:.4f} pixels")
-
+        all_results['frame_reprojection_errors'].append(avg_reproj_error_pair_val) # Store the calculated pair average
+        log_level_reproj = logging.INFO if np.isfinite(avg_reproj_error_pair_val) else logging.WARNING
+        logging.log(log_level_reproj, f"Pair ({i-1}, {i}): Avg Local Reprojection Error: {avg_reproj_error_pair_val:.4f} pixels")
+        # --- END: 6. Quantify AND Visualize Reprojection Error ---
 
         # 7. Quantify: Geometric Depth Consistency (Unchanged Logic, uses relative VGGT pose for warping)
         depth_error = np.nan
@@ -1571,95 +1943,59 @@ def evaluate_3d_consistency(args):
         plt.savefig(out_path, dpi=150, bbox_inches='tight')
         plt.close()
         logging.info(f"Saved plot: {out_path}")
+    
+    # 首先解析 summary.txt（路径可从 args 或硬编码）
+    summary_txt = args.summary_txt_path  # 你需要在 args 中添加这个字段，指向 composite_3d_consistency_summary_pca_weights.txt
+    norm_params, pca_weights = parse_summary_file(summary_txt)
 
-
-    # Average metrics (use np.nanmean to ignore NaNs)
-    avg_local_rot_var = np.nanmean(local_rot_vars)
-    avg_local_trans_var = np.nanmean(local_trans_vars)
-    avg_reproj_error = np.nanmean(reproj)
-    avg_global_rot_var = np.nanmean(global_rot_vars)     # Changed variable name
-    avg_global_trans_var = np.nanmean(global_trans_vars) # Changed variable name
-    avg_depth_error = np.nanmean(depth_err)
-    avg_valid_tracks = np.nanmean(all_results['num_valid_tracks_per_pair'])
-    avg_pnp_poses = np.nanmean(all_results['num_pnp_poses_per_pair'])
-
-    # --- Normalize scores (Lower variance/error is better -> Score = max(0, 1 - Value/MaxValue)) ---
-    # Local Consistency Score
-    score_local_rot = max(0.0, 1.0 - avg_local_rot_var / args.norm_max_local_rot_var) if np.isfinite(avg_local_rot_var) else 0.0
-    score_local_trans = max(0.0, 1.0 - avg_local_trans_var / args.norm_max_local_trans_var) if np.isfinite(avg_local_trans_var) else 0.0
-    score_local_consistency = np.clip((score_local_rot + score_local_trans) / 2.0, 0.0, 1.0) # Average of rot/trans scores
-
-    # Reprojection Score
-    score_reproj = max(0.0, 1.0 - avg_reproj_error / args.norm_max_reproj_err) if np.isfinite(avg_reproj_error) else 0.0
-    score_reproj = np.clip(score_reproj, 0.0, 1.0)
-
-    # Global Consistency Score (using variance now)
-    score_global_rot = max(0.0, 1.0 - avg_global_rot_var / args.norm_max_global_rot_var) if np.isfinite(avg_global_rot_var) else 0.0 # Uses new norm param
-    score_global_trans = max(0.0, 1.0 - avg_global_trans_var / args.norm_max_global_trans_var) if np.isfinite(avg_global_trans_var) else 0.0 # Uses new norm param
-    score_global_consistency = np.clip((score_global_rot + score_global_trans) / 2.0, 0.0, 1.0) # Average of rot/trans scores
-
-    # Depth Consistency Score
-    score_depth_cons = max(0.0, 1.0 - avg_depth_error / args.norm_max_depth_err) if np.isfinite(avg_depth_error) else 0.0
-    score_depth_cons = np.clip(score_depth_cons, 0.0, 1.0)
-
-
-    # --- Weighted final score ---
-    weights = args.final_score_weights
-    # Ensure weights correspond to [LocalCons, Reproj, GlobalCons, DepthCons]
-    scores = [score_local_consistency, score_reproj, score_global_consistency, score_depth_cons]
-    total_weight = sum(weights)
-
-    if total_weight <= 1e-6:
-        logging.warning("Sum of final_score_weights is near zero. Using equal weights [0.25]*4.")
-        weights = [0.25] * 4
-        total_weight = 1.0
-
-    final_score = sum(w * s for w, s in zip(weights, scores)) / total_weight
-    final_score = np.clip(final_score, 0.0, 1.0)
-
-    # Compile final results dictionary (ensure NaN -> None for JSON)
-    def nan_to_none(value):
-        return None if value is None or (isinstance(value, float) and math.isnan(value)) else float(value)
-
-    # Use new keys for final results
-    final_results = {
-        # Raw Averages
-        'average_local_rotation_variance': nan_to_none(avg_local_rot_var),
-        'average_local_translation_variance': nan_to_none(avg_local_trans_var),
-        'average_reprojection_error': nan_to_none(avg_reproj_error),
-        'average_global_rotation_variance': nan_to_none(avg_global_rot_var), # Changed key
-        'average_global_translation_variance': nan_to_none(avg_global_trans_var),# Changed key
-        'average_depth_consistency_error': nan_to_none(avg_depth_error),
-        'average_valid_tracks_per_pair': nan_to_none(avg_valid_tracks),
-        'average_pnp_poses_per_pair': nan_to_none(avg_pnp_poses),
-        # Normalized Scores
-        'normalized_local_consistency_score': float(score_local_consistency),
-        'normalized_reprojection_score': float(score_reproj),
-        'normalized_global_consistency_score': float(score_global_consistency), # Changed key
-        'normalized_depth_consistency_score': float(score_depth_cons),
-        # Final Score
-        'final_consistency_score': float(final_score),
-        # Metadata
-        'num_frames': num_frames,
-        'num_processed_pairs': processed_pairs_count,
-        'num_skipped_pairs': all_results['skipped_pairs'],
-        'weights_used': weights, # Weights order: [LocalCons, Reproj, GlobalCons, DepthCons]
-        'normalization_params': { # Add normalization params used
-             'norm_max_local_rot_var': args.norm_max_local_rot_var,
-             'norm_max_local_trans_var': args.norm_max_local_trans_var,
-             'norm_max_reproj_err': args.norm_max_reproj_err,
-             'norm_max_global_rot_var': args.norm_max_global_rot_var, # Changed key
-             'norm_max_global_trans_var': args.norm_max_global_trans_var,# Changed key
-             'norm_max_depth_err': args.norm_max_depth_err
+    frame_pair_scores = []
+    # 对每一个处理过的“帧对索引”i （0 对应帧 1 vs 0，…）
+    num_pairs = len(local_rot_vars)
+    for idx in range(num_pairs):
+        # 原始值字典
+        raw = {
+            'average_local_rotation_variance':   local_rot_vars[idx],
+            'average_local_translation_variance':local_trans_vars[idx],
+            'average_reprojection_error':        reproj[idx],
+            'average_global_rotation_variance':  global_rot_vars[idx],
+            'average_global_translation_variance': global_trans_vars[idx],
+            'average_depth_consistency_error':   depth_err[idx],
         }
-    }
 
-    logging.info(f"--- Final Results (using VGGT, Variance-based Global) ---")
-    logging.info(json.dumps(final_results, indent=4))
+        # 计算 m'' 和 S_3DC
+        mpp = {}
+        num, denom = 0.0, 0.0
+        for key in METRIC_KEYS:
+            val = raw.get(key, None)
+            params = norm_params.get(key, {})
+            μ = params.get('mu_raw', None)
+            σ = params.get('sigma_raw', None)
+            zmin = params.get('z_score_min', None)
+            zmax = params.get('z_score_max', None)
+            w = pca_weights.get(key, 0.0)
 
-    # Optionally return the detailed per-frame results too
-    # return final_results, all_results
-    return final_results
+            if val is None or μ is None or σ is None or zmin is None or zmax is None:
+                mpp[key] = np.nan
+                continue
+
+            # Z-score
+            z = 0.0 if σ == 0 else (val - μ) / σ
+            # Min-Max 归一化到 [0,1]
+            span = zmax - zmin
+            m_val = 0.0 if span == 0 else (z - zmin) / span
+            mpp[key] = m_val
+
+            if not np.isnan(m_val) and w > 0:
+                num   += w * m_val
+                denom += w
+
+        S3DC = num / denom if denom > 0 else np.nan
+        frame_pair_scores.append(S3DC)
+
+    # 存入 all_results，或打印／写文件都可以
+    all_results['frame_pair_S3DC_scores'] = frame_pair_scores
+    logging.info("每个帧对的 S_3DC 分数计算完毕。")
+    return all_results
 
 
 # --- Argument Parsing and Main Execution (MODIFIED Args) ---
@@ -1712,7 +2048,9 @@ if __name__ == "__main__":
     parser.add_argument("--vggt_model_name", type=str, default="facebook/VGGT-1B", help="Name of the VGGT model to load from Hugging Face.")
 
     # Debugging (Unchanged)
-    parser.add_argument("--debug_vis_interval", type=int, default=10, help="Interval (in frames) for saving debug visualizations. 0 to disable.")
+    parser.add_argument("--debug_vis_interval", type=int, default=0, help="Interval (in frames) for saving debug visualizations. 0 to disable.")
+    
+    parser.add_argument("--summary_txt_path", type=str, default="3d_consistency/result/fast_new/composite_3d_consistency_summary_pca_weights.txt", help="Path to the summary file containing normalization parameters and PCA weights.")
 
     args = parser.parse_args()
 
@@ -1753,18 +2091,17 @@ if __name__ == "__main__":
     try:
         results = evaluate_3d_consistency(video_args) # Pass the modified args
         video_name_top = video_name.split('_')[0] if '_' in video_name else video_name
-        os.makedirs(os.path.join('3d_consistency','result','ablation',video_name_top), exist_ok=True)
-        args.output_json = os.path.join('3d_consistency','result','ablation',video_name_top,f"{video_name}.json")
+        os.makedirs(os.path.join('vis','score',video_name_top), exist_ok=True)
+        args.output_json = os.path.join('vis','score',video_name_top,f"{video_name}.txt")
         if results:
-            # Save results to JSON (Unchanged)
-            try:
-                 with open(args.output_json, 'w') as f:
-                    json.dump(results, f, indent=4)
-                 logging.info(f"Results for {video_name} saved to {args.output_json}")
-            except TypeError as e:
-                logging.error(f"Could not serialize results to JSON for {video_name}. Error: {e}")
-            except Exception as e:
-                 logging.error(f"Could not save results to JSON '{args.output_json}': {e}")
+            with open(args.output_json, 'w', encoding='utf-8') as f:
+                f.write("Pair_Index\tS_3DC_score\n")
+                for idx, s in enumerate(results['frame_pair_S3DC_scores']):
+                    score_str = f"{s:.6f}" if not np.isnan(s) else "N/A"
+                    f.write(f"{idx}\t{score_str}\n")
+                f.write(f"Final_S3DC_score\t{np.nanmean(results['frame_pair_S3DC_scores']):.6f}\n")
+            logging.info(f"Saved per-pair S_3DC scores → {args.output_json}")
+
 
     except Exception as e:
         logging.exception(f"An critical error occurred during the evaluation pipeline for video {video_name}:")

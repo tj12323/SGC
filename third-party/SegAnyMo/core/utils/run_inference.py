@@ -131,23 +131,6 @@ def main(
         img_dirs_root = args.data_dir
         data_dir = os.path.dirname(img_dirs_root)
         img_names = sorted(os.listdir(img_dirs_root))
-        # img_names = ['dancing','crossing','cat-girl','boxing-fisheye']
-        # img_names = ['dog-agility']
-        # img_names = ['A couple in formal evening wear going home get caught in a heavy downpour with umbrellas by Hokusai, in the style of Ukiyo-0',\
-        #              'a bear hunting for prey-1','golden fish swimming in the ocean.-1']
-        # img_names = ['libby','parkour','dog']
-        # pattern = re.compile(r'^hotshot_(\d+)$')  # 若有扩展名可改为 r'^hotshot_(\d+)\.jpg$' 等
-        # matched = []
-        # for name in img_names:
-        #     m = pattern.match(name)
-        #     if m:
-        #         idx = int(m.group(1))  # 数字部分
-        #         matched.append((idx, name))
-
-        # # 3. 按数字部分排序，得到最终列表
-        # matched.sort(key=lambda x: x[0])
-        # img_names = [name for _, name in matched]
-
     
     with ProcessPoolExecutor(max_workers=len(gpus)) as exe:
         for i, img_name in enumerate(img_names):
@@ -227,11 +210,11 @@ def main(
             elif args.tracks and track_model == "delta":
                 # python3 gen_data.py  --use_fp16
                 cmd = (
-                    f"conda run -n densetrack3d CUDA_VISIBLE_DEVICES={dev_id} python3 /home/zwz/code/DELTA_densetrack3d/gen_data.py "
+                    f"conda run -n densetrack3d CUDA_VISIBLE_DEVICES={dev_id} python3 third-party/DELTA_densetrack3d/gen_data.py "
                     f"--image_dir \"{img_dir}\" "
                     f"--out_dir \"{track_dir}\" "
                     f"--use_fp16 "
-                    "--ckpt /home/zwz/code/DELTA_densetrack3d/checkpoints/densetrack2d.pth "
+                    "--ckpt third-party/DELTA_densetrack3d/checkpoints/densetrack2d.pth "
                     f"--step {args.step} "
                 )
                 exe.submit(timed_subprocess_call_print, cmd, shell=True)
