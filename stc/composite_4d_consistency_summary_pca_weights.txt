@@ -1,4 +1,4 @@
-Composite 3D Consistency Score (S_3DC): Lower is better.
+Composite 4D Consistency Score (STC): Lower is better.
 Normalization: Z-score standardization, then Min-Max scaling of Z-scores to [0 (best), 1 (worst)].
 
 --- Normalization Parameters Used (calculated from the processed datasets) ---
@@ -52,7 +52,7 @@ Calculated PCA Weights: {
 }
 
 --- Detailed Results Table ---
-Rank  | Dataset                   | S_3DC Score     | JSONs   | LRotVar    | LTransVar  | ReprErr    | GRotVar    | GTransVar  | DepthCons  | NormLRotV  | NormLTraV  | NormRepEr  | NormGRotV  | NormGTraV  | NormDepCo 
+Rank  | Dataset                   | STC Score     | JSONs   | LRotVar    | LTransVar  | ReprErr    | GRotVar    | GTransVar  | DepthCons  | NormLRotV  | NormLTraV  | NormRepEr  | NormGRotV  | NormGTraV  | NormDepCo 
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 1     | rtx                       | 0.0448          | 100     | 16.2475    | 0.0132     | 1.3322     | 3.2045     | 0.0157     | 0.0273     | 0.159      | 0.000      | 0.000      | 0.010      | 0.000      | 0.055     
 2     | nuscenes                  | 0.0468          | 100     | 6.5223     | 0.0182     | 5.0918     | 2.0900     | 0.0220     | 0.0331     | 0.000      | 0.000      | 1.000      | 0.002      | 0.000      | 0.113     
