@@ -1734,7 +1734,7 @@ if __name__ == "__main__":
     # Debugging 
     parser.add_argument("--debug_vis_interval", type=int, default=0, help="Interval (in frames) for saving debug visualizations. 0 to disable.")
     
-    parser.add_argument("--summary_txt_path", type=str, default="stc/composite_3d_consistency_summary_pca_weights.txt", help="Path to the summary file containing normalization parameters and PCA weights.")
+    parser.add_argument("--summary_txt_path", type=str, default="stc/composite_4d_consistency_summary_pca_weights.txt", help="Path to the summary file containing normalization parameters and PCA weights.")
 
     args = parser.parse_args()
 
