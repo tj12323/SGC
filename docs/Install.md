@@ -50,7 +50,7 @@ Our project relies on several third-party libraries for various functionalities 
 
 ### 3.1. SegAnyMo Setup
 
-SegAnyMo is used for motion segmentation.
+[SegAnyMo](https://github.com/nnanhuang/SegAnyMo) is used for motion segmentation.
 
 **A. Install SegAnyMo Dependencies:**
 
@@ -96,7 +96,7 @@ cd ../.. # Back to STC root directory
 
 ### 3.2. DELTA Setup
 
-DELTA is used for dense 2D tracking.
+[DELTA](https://github.com/snap-research/DELTA_densetrack3d) is used for dense 2D tracking.
 **Note:** DELTA requires its own Conda environment.
 
 **A. Create DELTA Environment and Install Dependencies:**
@@ -143,7 +143,7 @@ conda activate stc # Switch back to the main STC environment
 
 ### 3.3. Video-Depth-Anything Setup
 
-Video-Depth-Anything is used for video depth estimation.
+[Video-Depth-Anything](https://github.com/DepthAnything/Video-Depth-Anything) is used for video depth estimation.
 
 **A. Install Dependencies:**
 
@@ -177,7 +177,7 @@ cd ../.. # Back to STC root directory
 
 ### 3.4. VGGT Setup
 
-VGGT is used for camera parameter estimation.
+[VGGT](https://github.com/facebookresearch/vggt) is used for camera parameter estimation.
 
 ```bash
 cd third-party
