@@ -1,31 +1,24 @@
-import cv2
-import numpy as np
-from scipy.spatial.transform import Rotation as R
-from sklearn.cluster import KMeans, MiniBatchKMeans
-from skimage.segmentation import slic
-from skimage.util import img_as_float
-import warnings
+import argparse
+import datetime
+import json
 import logging
 import os
-import argparse
-import glob
-import json
-from functools import partial
-import pdb
-import datetime
-import math # Added for isnan
 import re
-
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
 import torch
+import cupy as cp
+from cuml.cluster import KMeans as cuKMeans
+from scipy.spatial.transform import Rotation as R
+from skimage.segmentation import slic
+from skimage.util import img_as_float
 from vggt.models.vggt import VGGT
 from vggt.utils.load_fn import load_and_preprocess_images
 from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 
-from skimage import color # Added for Lab conversion
-import seaborn as sns
-import matplotlib.pyplot as plt
 
-# --- Configure logging (same as before) ---
 log_dir = "logs_global"
 os.makedirs(log_dir, exist_ok=True)
 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -41,10 +34,7 @@ logging.basicConfig(
 logging.info(f"Logging initialized. Log file: {log_filepath}")
 
 
-# --- Helper Functions (Existing ones mostly unchanged, ADDED calculate_variance_vs_reference_pose) ---
-
 def load_frame_data(frame_path, depth_input, mos_path, semantic_path=None, depth_scale=1.0):
-    # (Implementation unchanged)
     frame = cv2.imread(frame_path)
 
     if isinstance(depth_input, np.ndarray):
@@ -86,7 +76,6 @@ def load_frame_data(frame_path, depth_input, mos_path, semantic_path=None, depth
     return frame, depth, mos_mask, semantic_mask
 
 def apply_masks(frame, depth, mos_mask, semantic_mask=None, static_semantic_labels=None):
-    # (Implementation unchanged)
     if mos_mask is None:
         logging.warning("MOS mask is None, treating entire frame as static.")
         static_mask = np.ones(frame.shape[:2], dtype=bool)
@@ -109,9 +98,7 @@ def apply_masks(frame, depth, mos_mask, semantic_mask=None, static_semantic_labe
     return static_frame, static_depth, static_mask
 
 
-def get_3d_points(pixels_2d, depth_map, K): # Added K argument
-    # (Implementation unchanged)
-    # Input validation for K
+def get_3d_points(pixels_2d, depth_map, K):
     if K is None or not isinstance(K, np.ndarray) or K.shape != (3, 3):
         logging.error("get_3d_points received invalid K.")
         return np.empty((0, 3)), np.empty((0, 2)), np.array([], dtype=bool)
@@ -134,7 +121,6 @@ def get_3d_points(pixels_2d, depth_map, K): # Added K argument
 
 
 def orthogonalize_rotation_matrix(R_in):
-    # (Implementation unchanged)
     if R_in is None or not isinstance(R_in, np.ndarray) or R_in.shape != (3, 3):
         logging.warning("Invalid input provided for orthogonalization.")
         return None
@@ -164,7 +150,6 @@ def orthogonalize_rotation_matrix(R_in):
         return None
 
 def angular_distance(R1, R2):
-    # (Implementation unchanged)
     if R1 is None or R2 is None or not isinstance(R1, np.ndarray) or not isinstance(R2, np.ndarray) or R1.shape != (3,3) or R2.shape != (3,3): return np.inf
 
     tolerance = 1e-2
@@ -187,98 +172,12 @@ def angular_distance(R1, R2):
 
 
 def normalize_translation(t):
-    # (Implementation unchanged)
     if t is None or not isinstance(t, np.ndarray): return None
     t_flat = t.flatten()
     norm = np.linalg.norm(t_flat)
     if norm < 1e-9: return np.zeros_like(t_flat) # Return zero vector if norm is too small
     return t_flat / norm
 
-# --- Segmentation function (using Depth-Aware SLIC) ---
-# def segment_static_background(static_frame, static_depth, static_mask,
-#                               n_segments=100, compactness=10.0,
-#                               depth_weight=5.0, min_size_filter=100,
-#                               sigma=1.0):
-#     # (Implementation unchanged - using the provided Depth-Aware SLIC version)
-#     h, w = static_frame.shape[:2]
-#     sub_area_segments = np.zeros((h, w), dtype=np.int32)
-#     num_segments = 0
-
-#     if not np.any(static_mask):
-#         logging.warning("Static mask is empty, no segments generated.")
-#         return sub_area_segments, num_segments
-
-#     logging.info(f"Segmenting using Depth-Aware SLIC: n_segments={n_segments}, "
-#                  f"compactness={compactness}, depth_weight={depth_weight}, min_size={min_size_filter}")
-
-#     try:
-#         if static_frame.dtype != np.uint8:
-#              if np.max(static_frame) <= 1.0:
-#                  frame_uint8 = (static_frame * 255).astype(np.uint8)
-#              else:
-#                  frame_uint8 = static_frame.astype(np.uint8)
-#         else:
-#              frame_uint8 = static_frame
-
-#         lab_image = color.rgb2lab(cv2.cvtColor(frame_uint8, cv2.COLOR_BGR2RGB))
-
-#         depth_normalized = np.zeros_like(static_depth, dtype=np.float32)
-#         valid_depth_mask = static_mask & (static_depth > 1e-5)
-
-#         if np.any(valid_depth_mask):
-#             valid_depths = static_depth[valid_depth_mask]
-#             min_d = np.min(valid_depths)
-#             max_d = np.max(valid_depths)
-#             depth_range = max_d - min_d
-
-#             if depth_range > 1e-9:
-#                 depth_normalized[valid_depth_mask] = (static_depth[valid_depth_mask] - min_d) / depth_range
-#             else:
-#                 depth_normalized[valid_depth_mask] = 0.5
-#             logging.debug(f"Normalized depth range: [{min_d:.2f}, {max_d:.2f}] -> [0, 1]")
-#         else:
-#             logging.warning("No valid depth values found within the static mask. Depth channel will be zero.")
-
-#         weighted_depth = depth_normalized * depth_weight
-#         weighted_depth_ch = weighted_depth[..., np.newaxis]
-#         feature_image = np.concatenate((img_as_float(lab_image), weighted_depth_ch), axis=2)
-#         logging.debug(f"Feature image shape for SLIC: {feature_image.shape}")
-
-#         slic_labels = slic(
-#             feature_image,
-#             n_segments=n_segments,
-#             compactness=compactness,
-#             sigma=sigma,
-#             mask=static_mask.astype(bool),
-#             start_label=1,
-#             enforce_connectivity=True,
-#             channel_axis=-1
-#         )
-
-#         unique_labels = np.unique(slic_labels)
-#         current_id = 1
-#         for label in unique_labels:
-#             if label == 0: continue
-#             segment_mask = (slic_labels == label)
-#             pixel_count_in_mask = np.sum(segment_mask & static_mask)
-#             if pixel_count_in_mask >= min_size_filter:
-#                 sub_area_segments[segment_mask] = current_id
-#                 current_id += 1
-#         num_segments = current_id - 1
-#         if num_segments == 0:
-#             logging.warning("Depth-Aware SLIC generated 0 valid segments after size filtering.")
-
-#     except ImportError:
-#          logging.error("Scikit-image library not found. Please install it (`pip install scikit-image`)")
-#          return np.zeros((h, w), dtype=np.int32), 0
-#     except Exception as e:
-#         logging.error(f"Depth-Aware SLIC segmentation failed: {e}", exc_info=True)
-#         return np.zeros((h, w), dtype=np.int32), 0
-
-#     logging.info(f"Generated {num_segments} depth-aware sub-area segments.")
-#     return sub_area_segments, num_segments
-
-# Segmentation function (segment_static_background) remains the same
 def segment_static_background(static_frame, static_depth, static_mask, method='slic', **kwargs):
     """Segments the static background into sub-areas."""
     h, w = static_frame.shape[:2]
@@ -290,9 +189,7 @@ def segment_static_background(static_frame, static_depth, static_mask, method='s
         logging.warning("Static mask is empty, no segments generated.")
         return sub_area_segments, num_segments
 
-    # —— 原有 semantic 分支 —— #
     if method == 'semantic' and 'semantic_mask' in kwargs and kwargs['semantic_mask'] is not None and 'static_labels' in kwargs:
-        # ... (semantic branch unchanged) ...
         logging.info("Segmenting using semantic labels.")
         semantic_mask = kwargs['semantic_mask']
         static_labels = kwargs['static_labels']
@@ -313,8 +210,6 @@ def segment_static_background(static_frame, static_depth, static_mask, method='s
         num_segments = current_id - 1
         if num_segments == 0:
             logging.warning("Semantic segmentation yielded no valid segments.")
-
-    # —— 原有 depth 分支 (MODIFIED) —— #
     elif method == 'depth':
         logging.info("Segmenting using GPU-accelerated depth clustering (cuML).")
         n_clusters = kwargs.get('n_depth_clusters', 10)
@@ -326,14 +221,8 @@ def segment_static_background(static_frame, static_depth, static_mask, method='s
             method = 'slic' # Fallback to SLIC
         else:
             try:
-                import cupy as cp
-                from cuml.cluster import KMeans as cuKMeans # Or MiniBatchKMeans if strictly needed and available
-
-                # 1. Move data to GPU
                 gpu_valid_depth_pixels = cp.asarray(valid_depth_pixels.reshape(-1, 1), dtype=cp.float32)
 
-                # Heuristic for n_init with cuML KMeans, usually okay with default or a modest number
-                # cuML's KMeans is often very fast.
                 kmeans_model_gpu = cuKMeans(
                     n_clusters=n_clusters,
                     random_state=0, # For reproducibility
@@ -342,15 +231,12 @@ def segment_static_background(static_frame, static_depth, static_mask, method='s
                 )
                 logging.info(f"Using cuML KMeans with n_clusters={n_clusters}")
 
-                # 2. Fit and predict on GPU
                 gpu_labels = kmeans_model_gpu.fit_predict(gpu_valid_depth_pixels)
 
-                # 3. Move labels back to CPU (NumPy)
                 labels = cp.asnumpy(gpu_labels)
 
                 temp_segments = np.zeros((h, w), dtype=np.int32)
-                # Assign labels back to their original 2D pixel locations
-                temp_segments[pixel_coords[:, 0], pixel_coords[:, 1]] = labels + 1 # labels are 0-indexed
+                temp_segments[pixel_coords[:, 0], pixel_coords[:, 1]] = labels + 1
 
                 current_id = 1
                 unique_labels = np.unique(temp_segments)
@@ -363,8 +249,6 @@ def segment_static_background(static_frame, static_depth, static_mask, method='s
                 num_segments = current_id - 1
             except ImportError:
                 logging.error("cuML or CuPy not found. Cannot use GPU for K-Means. Falling back to SLIC or scikit-learn MiniBatchKMeans.")
-                # Optionally, implement a fallback to scikit-learn's MiniBatchKMeans here
-                # For now, falling back to SLIC as per original logic for other failures
                 method = 'slic'
                 num_segments = 0
             except Exception as e:
@@ -372,19 +256,17 @@ def segment_static_background(static_frame, static_depth, static_mask, method='s
                 method = 'slic' # Fallback to SLIC on error
                 num_segments = 0 # Ensure num_segments is reset for fallback logic
 
-    # —— 新增 grid 网格分割分支 —— #
     elif method == 'grid':
-        # ... (grid branch unchanged) ...
         logging.info("Segmenting using uniform grid.")
         grid_rows, grid_cols = kwargs.get('grid_size', (4, 4))
         cell_h = h // grid_rows
         cell_w = w // grid_cols
         current_id = 1
 
-        for i_grid in range(grid_rows): # Renamed to avoid conflict
+        for i_grid in range(grid_rows):
             y0 = i_grid * cell_h
             y1 = (i_grid + 1) * cell_h if i_grid < grid_rows - 1 else h
-            for j_grid in range(grid_cols): # Renamed to avoid conflict
+            for j_grid in range(grid_cols):
                 x0 = j_grid * cell_w
                 x1 = (j_grid + 1) * cell_w if j_grid < grid_cols - 1 else w
                 cell_mask = static_mask[y0:y1, x0:x1]
@@ -395,9 +277,6 @@ def segment_static_background(static_frame, static_depth, static_mask, method='s
         logging.info(f"Generated {num_segments} grid-based segments.")
         return sub_area_segments, num_segments # Return early for grid
 
-    # —— 原有 SLIC 分支 (and fallback) —— #
-    # This block will be executed if method was 'slic' initially,
-    # or if semantic/depth clustering failed or produced no segments.
     if method == 'slic' or num_segments == 0: # Check num_segments here for fallback
         if num_segments == 0 and method != 'slic': # Log if falling back
             logging.info(f"Previous segmentation method '{method}' yielded 0 segments. Falling back to SLIC segmentation.")
@@ -460,13 +339,10 @@ def segment_static_background(static_frame, static_depth, static_mask, method='s
     logging.info(f"Generated {num_segments} sub-area segments using method '{final_method_log}'.")
     return sub_area_segments, num_segments
 
-
-
-# --- Pose Estimation and Local Consistency (Unchanged) ---
+# --- Pose Estimation and Local Consistency ---
 def estimate_pose_per_subarea(frame_idx, sub_area_segments, num_segments,
                               tracks_for_pair, depth_prev, K_prev, K_curr, # Added K_prev, K_curr
                               distCoeffs=None, pnp_reprojection_error=8.0):
-    # (Implementation unchanged)
     sub_area_poses = {}
     if tracks_for_pair is None or 'points_prev' not in tracks_for_pair or 'points_curr' not in tracks_for_pair:
         logging.warning(f"Frame {frame_idx}: Invalid or missing track data for PnP.")
@@ -589,9 +465,7 @@ def assess_local_consistency(sub_area_poses):
         mean_rvec = np.mean(rvecs, axis=0)
         mean_rotation = R.from_rotvec(mean_rvec * np.pi/180.0).as_matrix()
 
-        # 逐个计算 (angular distance)^2
         rot_d2 = [angular_distance(m, mean_rotation)**2 for m in rotations]
-        # 只保留有限值
         rot_d2 = [d for d in rot_d2 if np.isfinite(d)]
 
         # 剔除 IQR 外的异常点
@@ -599,7 +473,7 @@ def assess_local_consistency(sub_area_poses):
         if trimmed.size > 0:
             rot_variance = float(trimmed.mean())
         else:
-            rot_variance = float(np.mean(rot_d2))  # 若剔完了也回退到全量均值
+            rot_variance = float(np.mean(rot_d2))
         rot_variance = float(np.mean(rot_d2))
 
     except Exception as e:
@@ -638,7 +512,7 @@ def assess_local_consistency(sub_area_poses):
 
 def calculate_reprojection_error(points_3d_prev, points_2d_curr_matched, pose, K_curr, # Added K_curr
                                  sub_area_segments, seg_id, distCoeffs=None):
-    # (Implementation unchanged)
+    
     if pose is None or pose[0] is None or pose[1] is None: return np.nan
     R_sub, t_sub = pose
     if points_3d_prev is None or points_2d_curr_matched is None or points_3d_prev.shape[0] == 0:
@@ -682,7 +556,7 @@ def calculate_reprojection_error(points_3d_prev, points_2d_curr_matched, pose, K
         logging.error(f"Unexpected error during reprojection for seg_id {seg_id}: {e}", exc_info=True)
         return np.nan
 
-# --- Helper Function for Relative Pose Calculation (Unchanged) ---
+# --- Helper Function for Relative Pose Calculation  ---
 def calculate_relative_pose(pose_wc_prev, pose_wc_curr):
     """
     Calculates the relative pose T_curr_prev, which transforms points
@@ -761,8 +635,6 @@ def calculate_relative_pose(pose_wc_prev, pose_wc_curr):
         logging.error(f"Unexpected error calculating relative pose: {e}", exc_info=True)
         return None, None
 
-
-# --- *** NEW HELPER FUNCTION *** ---
 def calculate_variance_vs_reference_pose(sub_area_poses, reference_pose):
     """
     Calculates the variance of sub-area poses relative to a given reference pose.
@@ -847,12 +719,9 @@ def calculate_variance_vs_reference_pose(sub_area_poses, reference_pose):
         trans_variance_vs_ref = np.nan
 
     return rot_variance_vs_ref, trans_variance_vs_ref
-# --- End of NEW HELPER FUNCTION ---
 
-
-# --- Helper Function for Depth Warping (Unchanged) ---
 def warp_depth(depth_prev, K_prev, K_curr, pose_curr_from_prev, depth_curr_shape, distCoeffs=None): # Added K_prev, K_curr
-    # (Implementation unchanged)
+    
     h_prev, w_prev = depth_prev.shape
     h_curr, w_curr = depth_curr_shape
 
@@ -948,7 +817,6 @@ def warp_depth(depth_prev, K_prev, K_curr, pose_curr_from_prev, depth_curr_shape
 
     return depth_warped
 
-# 在文件顶部引入这两个常量（与 compute_video_score 保持一致）
 METRIC_KEYS = [
     'average_local_rotation_variance',
     'average_local_translation_variance',
@@ -959,9 +827,6 @@ METRIC_KEYS = [
 ]
 
 def parse_summary_file(summary_path):
-    """
-    与前面相同：从 summary txt 文件中提取 normalization parameters 和 PCA weights
-    """
     with open(summary_path, 'r') as f:
         text = f.read()
     norm_match = re.search(
@@ -977,20 +842,17 @@ def parse_summary_file(summary_path):
     norm_params = json.loads(norm_match.group(1))
     pca_weights = json.loads(weight_match.group(1))
     return norm_params, pca_weights
-# --- Main Processing Function (MODIFIED) ---
 
 def evaluate_3d_consistency(args):
-    # --- Setup Debug Dirs (Unchanged) ---
-    debug_root = "check"
-    static_debug_dir = os.path.join(debug_root, "static")
-    segments_debug_dir = os.path.join(debug_root, "segments")
-    calib_debug_dir = os.path.join(debug_root, "calib_points")
-    warp_debug_dir = os.path.join(debug_root, "warped_depth")
-    plot_debug_dir = os.path.join(debug_root, "frames_plots", args.video_name)
-    for d in (static_debug_dir, segments_debug_dir, calib_debug_dir, warp_debug_dir, plot_debug_dir):
-        os.makedirs(d, exist_ok=True)
+    # debug_root = "check"
+    # static_debug_dir = os.path.join(debug_root, "static")
+    # segments_debug_dir = os.path.join(debug_root, "segments")
+    # calib_debug_dir = os.path.join(debug_root, "calib_points")
+    # warp_debug_dir = os.path.join(debug_root, "warped_depth")
+    # plot_debug_dir = os.path.join(debug_root, "frames_plots", args.video_name)
+    # for d in (static_debug_dir, segments_debug_dir, calib_debug_dir, warp_debug_dir, plot_debug_dir):
+    #     os.makedirs(d, exist_ok=True)
 
-    # --- Get list of data files (Unchanged) ---
     try:
         frame_files = sorted([f for f in os.listdir(args.frames_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tiff'))])
         # Load depths
@@ -1017,7 +879,6 @@ def evaluate_3d_consistency(args):
              raise ValueError("Need at least two frames to evaluate consistency.")
         logging.info(f"Found {num_frames} frames, depth maps, and MOS masks.")
 
-        # Semantic files validation (unchanged)
         semantic_files = []
         if args.semantics_dir and os.path.isdir(args.semantics_dir):
              semantic_files = sorted([f for f in os.listdir(args.semantics_dir) if f.lower().endswith('.png')])
@@ -1038,13 +899,13 @@ def evaluate_3d_consistency(args):
         logging.error(f"Error during initial file loading: {e}", exc_info=True)
         return None
 
-    # --- Tracking Data Directory (Unchanged) ---
+    # --- Tracking Data Directory  ---
     if not os.path.isdir(args.tracks_dir):
         logging.error(f"Tracking directory not found: {args.tracks_dir}")
         return None
     logging.info(f"Using track directory: {args.tracks_dir}")
 
-    # --- VGGT Initialization and Inference (Unchanged) ---
+    # --- VGGT Initialization and Inference  ---
     logging.info("--- Initializing VGGT Model ---")
     frame_files_basenames = sorted([f for f in os.listdir(args.frames_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tiff'))])
     frame_files_fullpaths = [os.path.join(args.frames_dir, f) for f in frame_files_basenames]
@@ -1191,7 +1052,7 @@ def evaluate_3d_consistency(args):
         frame_filename = frame_files[i]
         logging.info(f"--- Processing Frame {i}/{num_frames-1} ({frame_filename}) ---")
 
-        # Construct paths (unchanged)
+        # Construct paths 
         frame_path = os.path.join(args.frames_dir, frame_filename)
         depth_slice = depths_all[i]
         if args.mos_dir is not None:
@@ -1202,7 +1063,7 @@ def evaluate_3d_consistency(args):
         
         semantic_path = None
         if args.semantics_dir and i < len(semantic_files):
-            # Robust semantic file matching (unchanged)
+            # Robust semantic file matching 
             expected_semantic_file = frame_basename_no_ext + ".png"
             temp_semantic_path = os.path.join(args.semantics_dir, expected_semantic_file)
             if os.path.exists(temp_semantic_path): semantic_path = temp_semantic_path
@@ -1217,7 +1078,7 @@ def evaluate_3d_consistency(args):
                 else: logging.warning(f"Frame {i}: No semantic mask found for {expected_semantic_file}")
 
 
-        # Check for VGGT intrinsics FIRST (unchanged)
+        # Check for VGGT intrinsics FIRST 
         if i not in vggt_intrinsics:
             logging.error(f"Skipping frame {i} ({frame_files_basenames[i]}): Missing VGGT intrinsics.")
             prev_data = {}
@@ -1226,8 +1087,8 @@ def evaluate_3d_consistency(args):
                 all_results['frame_local_consistency_rot_var'].append(np.nan)
                 all_results['frame_local_consistency_trans_var'].append(np.nan)
                 all_results['frame_reprojection_errors'].append(np.nan)
-                all_results['frame_global_consistency_rot_var'].append(np.nan) # Changed key
-                all_results['frame_global_consistency_trans_var'].append(np.nan)# Changed key
+                all_results['frame_global_consistency_rot_var'].append(np.nan) 
+                all_results['frame_global_consistency_trans_var'].append(np.nan)
                 all_results['frame_depth_consistency_error'].append(np.nan)
                 all_results['mean_local_relative_poses'].append(None)
                 all_results['vggt_relative_poses'].append(None)
@@ -1237,7 +1098,7 @@ def evaluate_3d_consistency(args):
 
         K_curr = vggt_intrinsics[i]
 
-        # --- Load Frame Data (unchanged) ---
+        # --- Load Frame Data  ---
         try:
             if not frame_path:
                  raise IOError(f"Missing required files for frame {i} (frame/mos).")
@@ -1253,8 +1114,8 @@ def evaluate_3d_consistency(args):
                 all_results['frame_local_consistency_rot_var'].append(np.nan)
                 all_results['frame_local_consistency_trans_var'].append(np.nan)
                 all_results['frame_reprojection_errors'].append(np.nan)
-                all_results['frame_global_consistency_rot_var'].append(np.nan) # Changed key
-                all_results['frame_global_consistency_trans_var'].append(np.nan)# Changed key
+                all_results['frame_global_consistency_rot_var'].append(np.nan) 
+                all_results['frame_global_consistency_trans_var'].append(np.nan)
                 all_results['frame_depth_consistency_error'].append(np.nan)
                 all_results['mean_local_relative_poses'].append(None)
                 all_results['vggt_relative_poses'].append(None)
@@ -1269,8 +1130,8 @@ def evaluate_3d_consistency(args):
                 all_results['frame_local_consistency_rot_var'].append(np.nan)
                 all_results['frame_local_consistency_trans_var'].append(np.nan)
                 all_results['frame_reprojection_errors'].append(np.nan)
-                all_results['frame_global_consistency_rot_var'].append(np.nan) # Changed key
-                all_results['frame_global_consistency_trans_var'].append(np.nan)# Changed key
+                all_results['frame_global_consistency_rot_var'].append(np.nan) 
+                all_results['frame_global_consistency_trans_var'].append(np.nan)
                 all_results['frame_depth_consistency_error'].append(np.nan)
                 all_results['mean_local_relative_poses'].append(None)
                 all_results['vggt_relative_poses'].append(None)
@@ -1278,26 +1139,18 @@ def evaluate_3d_consistency(args):
                 all_results['num_pnp_poses_per_pair'].append(0)
              continue
 
-        # 1. Preprocess: Isolate Static Scene (unchanged)
+        # 1. Preprocess: Isolate Static Scene 
         static_frame, static_depth, static_mask = apply_masks(
             frame, depth, mos_mask, semantic_mask, args.static_semantic_labels
         )
 
-        # DEBUG Visualizations (Static, Segments - Unchanged)
-        if args.debug_vis_interval > 0 and i % args.debug_vis_interval == 0:
-             cv2.imwrite(os.path.join(static_debug_dir, f"{frame_basename_no_ext}_static_frame.png"), static_frame)
-             depth_vis = cv2.normalize(static_depth, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-             cv2.imwrite(os.path.join(static_debug_dir, f"{frame_basename_no_ext}_static_depth.png"), depth_vis)
+        # DEBUG Visualizations (Static, Segments)
+        # if args.debug_vis_interval > 0 and i % args.debug_vis_interval == 0:
+        #      cv2.imwrite(os.path.join(static_debug_dir, f"{frame_basename_no_ext}_static_frame.png"), static_frame)
+        #      depth_vis = cv2.normalize(static_depth, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        #      cv2.imwrite(os.path.join(static_debug_dir, f"{frame_basename_no_ext}_static_depth.png"), depth_vis)
 
         # 2. Segment Static Background (Current Frame i - using Depth-Aware SLIC)
-        # sub_area_segments, num_segments = segment_static_background(
-        #     static_frame, static_depth, static_mask,
-        #     n_segments=args.n_slic_segments,
-        #     compactness=args.slic_compactness,
-        #     depth_weight=args.depth_aware_slic_weight,
-        #     min_size_filter=args.min_segment_size,
-        #     sigma=args.slic_sigma
-        # )
         sub_area_segments, num_segments = segment_static_background(
             static_frame, static_depth, static_mask,
             method=args.segmentation_method,
@@ -1307,16 +1160,15 @@ def evaluate_3d_consistency(args):
             min_size_filter=args.min_segment_size
         )
 
-        # DEBUG Visualization (Segments - Unchanged)
-        if args.debug_vis_interval > 0 and num_segments > 0 and i % args.debug_vis_interval == 0:
-             seg_norm = ((sub_area_segments.astype(np.float32) / num_segments) * 255).astype(np.uint8)
-             seg_colormap = cv2.applyColorMap(seg_norm, cv2.COLORMAP_JET)
-             seg_colormap[sub_area_segments == 0] = [0, 0, 0] # Make non-segmented areas black
-             cv2.imwrite(os.path.join(segments_debug_dir, f"{frame_basename_no_ext}_segments_colormap.png"), seg_colormap)
-             overlay = cv2.addWeighted(static_frame, 0.7, seg_colormap, 0.3, 0)
-             cv2.imwrite(os.path.join(segments_debug_dir, f"{frame_basename_no_ext}_segments_overlay.png"), overlay)
+        # if args.debug_vis_interval > 0 and num_segments > 0 and i % args.debug_vis_interval == 0:
+        #      seg_norm = ((sub_area_segments.astype(np.float32) / num_segments) * 255).astype(np.uint8)
+        #      seg_colormap = cv2.applyColorMap(seg_norm, cv2.COLORMAP_JET)
+        #      seg_colormap[sub_area_segments == 0] = [0, 0, 0] # Make non-segmented areas black
+        #      cv2.imwrite(os.path.join(segments_debug_dir, f"{frame_basename_no_ext}_segments_colormap.png"), seg_colormap)
+        #      overlay = cv2.addWeighted(static_frame, 0.7, seg_colormap, 0.3, 0)
+        #      cv2.imwrite(os.path.join(segments_debug_dir, f"{frame_basename_no_ext}_segments_overlay.png"), overlay)
 
-        # Store data for current frame (unchanged)
+        # Store data for current frame 
         current_data = {
             'depth': depth, 'sub_area_segments': sub_area_segments, 'num_segments': num_segments,
             'frame_basename': frame_basename_no_ext,
@@ -1346,7 +1198,7 @@ def evaluate_3d_consistency(args):
                 skip_pair = True
 
         if not skip_pair:
-            # Track loading logic (unchanged)
+            # Track loading logic 
             try:
                 prev_basename = prev_data['frame_basename']
                 curr_basename = current_data['frame_basename']
@@ -1402,8 +1254,8 @@ def evaluate_3d_consistency(args):
             all_results['frame_local_consistency_rot_var'].append(np.nan)
             all_results['frame_local_consistency_trans_var'].append(np.nan)
             all_results['frame_reprojection_errors'].append(np.nan)
-            all_results['frame_global_consistency_rot_var'].append(np.nan) # Changed key
-            all_results['frame_global_consistency_trans_var'].append(np.nan)# Changed key
+            all_results['frame_global_consistency_rot_var'].append(np.nan) 
+            all_results['frame_global_consistency_trans_var'].append(np.nan)
             all_results['frame_depth_consistency_error'].append(np.nan)
             all_results['mean_local_relative_poses'].append(None)
             all_results['vggt_relative_poses'].append(None)
@@ -1420,7 +1272,7 @@ def evaluate_3d_consistency(args):
         processed_pairs_count += 1
         K_prev = prev_data['K']
 
-        # 3. Estimate Camera Poses per Sub-Area (Local PnP - Unchanged)
+        # 3. Estimate Camera Poses per Sub-Area (Local PnP)
         sub_area_poses = estimate_pose_per_subarea(
             i, current_data['sub_area_segments'], current_data['num_segments'],
             tracks_for_pnp, prev_data['depth'],
@@ -1432,7 +1284,7 @@ def evaluate_3d_consistency(args):
         all_results['num_pnp_poses_per_pair'].append(num_estimated_poses)
         logging.info(f"Pair ({i-1}, {i}): Estimated local poses for {num_estimated_poses}/{current_data['num_segments']} sub-areas.")
 
-        # 4. Assess Local Consistency (Variance around local mean - Unchanged)
+        # 4. Assess Local Consistency (Variance around local mean)
         local_rot_var, local_trans_var, mean_R_local, mean_t_local = assess_local_consistency(sub_area_poses)
         all_results['frame_local_consistency_rot_var'].append(local_rot_var)
         all_results['frame_local_consistency_trans_var'].append(local_trans_var)
@@ -1441,7 +1293,7 @@ def evaluate_3d_consistency(args):
         logging.log(log_level, f"Pair ({i-1}, {i}): Local Consistency: R Var={local_rot_var:.4f} (deg^2), T Var={local_trans_var:.4f}")
 
 
-        # 5. *** MODIFIED: Calculate Global Consistency (Variance vs VGGT Pose) ***
+        # 5. Calculate Global Consistency (Variance vs VGGT Pose)
         prev_frame_idx = prev_data['frame_index']
         curr_frame_idx = current_data['frame_index']
         global_rot_var, global_trans_var = np.nan, np.nan # Initialize variances
@@ -1497,30 +1349,30 @@ def evaluate_3d_consistency(args):
             # cv2.imwrite(out_path, overlay)
             # logging.info(f"Saved outlier visualization: {out_path}")
             
-            # --- MODIFIED VISUALIZATION: Poses with Segments Overlay ---
-            # 1. Create base image with segment overlay (similar to _segments_overlay.png)
-            vis_img_with_overlay = static_frame.copy() # Start with the static frame of current frame 'i'
-            num_curr_segments = current_data.get('num_segments', 0)
-            curr_sub_area_segments = current_data.get('sub_area_segments', None)
+            # # --- VISUALIZATION: Poses with Segments Overlay ---
+            # # 1. Create base image with segment overlay (similar to _segments_overlay.png)
+            # vis_img_with_overlay = static_frame.copy() # Start with the static frame of current frame 'i'
+            # num_curr_segments = current_data.get('num_segments', 0)
+            # curr_sub_area_segments = current_data.get('sub_area_segments', None)
 
-            if num_curr_segments > 0 and curr_sub_area_segments is not None:
-                # Normalize segment IDs for colormap application
-                # Using the same normalization as in the earlier segment debug visualization
-                seg_norm = ((curr_sub_area_segments.astype(np.float32) / num_curr_segments) * 255).astype(np.uint8)
-                seg_colormap = cv2.applyColorMap(seg_norm, cv2.COLORMAP_JET)
+            # if num_curr_segments > 0 and curr_sub_area_segments is not None:
+            #     # Normalize segment IDs for colormap application
+            #     # Using the same normalization as in the earlier segment debug visualization
+            #     seg_norm = ((curr_sub_area_segments.astype(np.float32) / num_curr_segments) * 255).astype(np.uint8)
+            #     seg_colormap = cv2.applyColorMap(seg_norm, cv2.COLORMAP_JET)
                 
-                # Make non-segmented areas (ID 0) black in the colormap
-                seg_colormap[curr_sub_area_segments == 0] = [0, 0, 0]
+            #     # Make non-segmented areas (ID 0) black in the colormap
+            #     seg_colormap[curr_sub_area_segments == 0] = [0, 0, 0]
                 
-                # Blend static frame with segment colormap
-                alpha_segments = 0.3 # Transparency for segment colors (same as debug)
-                vis_img_with_overlay = cv2.addWeighted(
-                    static_frame,             # Source image 1 (current static frame)
-                    1.0,                      # Weight for source image 1
-                    seg_colormap,             # Source image 2 (segment colors)
-                    alpha_segments,           # Weight for source image 2 (making it semi-transparent)
-                    0                         # Gamma value
-                )
+            #     # Blend static frame with segment colormap
+            #     alpha_segments = 0.3 # Transparency for segment colors (same as debug)
+            #     vis_img_with_overlay = cv2.addWeighted(
+            #         static_frame,             # Source image 1 (current static frame)
+            #         1.0,                      # Weight for source image 1
+            #         seg_colormap,             # Source image 2 (segment colors)
+            #         alpha_segments,           # Weight for source image 2 (making it semi-transparent)
+            #         0                         # Gamma value
+            #     )
             # else: vis_img_with_overlay remains a copy of static_frame if no segments
 
             # # 2. Prepare for drawing arrows on this new base image
@@ -1668,14 +1520,13 @@ def evaluate_3d_consistency(args):
             logging.warning(f"Pair ({i-1}, {i}): Failed to calculate relative pose from VGGT. Cannot calculate global variance.")
 
         # Store the results (variances)
-        all_results['frame_global_consistency_rot_var'].append(global_rot_var) # Changed key
-        all_results['frame_global_consistency_trans_var'].append(global_trans_var) # Changed key
+        all_results['frame_global_consistency_rot_var'].append(global_rot_var) 
+        all_results['frame_global_consistency_trans_var'].append(global_trans_var) 
         log_level_global = logging.INFO if np.isfinite(global_rot_var) and np.isfinite(global_trans_var) else logging.WARNING
         logging.log(log_level_global, f"Pair ({i-1}, {i}): Global Consistency vs VGGT: R Var={global_rot_var:.4f} (deg^2), T Var={global_trans_var:.4f}")
 
 
-        # 6. Quantify: Reprojection Error (Using Local Poses - Unchanged Logic)
-        frame_reproj_errors_list = []
+        # 6. Quantify: Reprojection Error
         points_prev_for_reproj = tracks_for_pnp['points_prev']
         points_curr_for_reproj = tracks_for_pnp['points_curr']
         points_3d_prev_reproj, _, valid_mask_reproj = get_3d_points(points_prev_for_reproj, prev_data['depth'], K_prev)
@@ -1728,18 +1579,18 @@ def evaluate_3d_consistency(args):
                 logging.warning(f"Pair ({i-1}, {i}): No valid overlapping pixels found for depth consistency check.")
                 depth_error = np.nan
 
-            # DEBUG Visualization: Warped Depth (Unchanged)
-            if args.debug_vis_interval > 0 and i % args.debug_vis_interval == 0 and np.any(valid_comparison_mask):
-                depth_warped_vis = cv2.normalize(depth_warped, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
-                depth_curr_vis = cv2.normalize(current_data['depth'], None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
-                diff_vis = cv2.normalize(np.abs(depth_warped - current_data['depth']), None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
-                diff_vis[~valid_comparison_mask] = 0
-                diff_colormap = cv2.applyColorMap(diff_vis, cv2.COLORMAP_MAGMA)
-                diff_colormap[~valid_comparison_mask] = [0, 0, 0]
-                cv2.imwrite(os.path.join(warp_debug_dir, f"{current_data['frame_basename']}_0_depth_curr.png"), depth_curr_vis)
-                cv2.imwrite(os.path.join(warp_debug_dir, f"{current_data['frame_basename']}_1_depth_warped_from_{prev_data['frame_basename']}.png"), depth_warped_vis)
-                cv2.imwrite(os.path.join(warp_debug_dir, f"{current_data['frame_basename']}_2_depth_diff.png"), diff_colormap)
-                cv2.imwrite(os.path.join(warp_debug_dir, f"{current_data['frame_basename']}_3_comparison_mask.png"), valid_comparison_mask.astype(np.uint8)*255)
+            # DEBUG Visualization: Warped Depth 
+            # if args.debug_vis_interval > 0 and i % args.debug_vis_interval == 0 and np.any(valid_comparison_mask):
+            #     depth_warped_vis = cv2.normalize(depth_warped, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+            #     depth_curr_vis = cv2.normalize(current_data['depth'], None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+            #     diff_vis = cv2.normalize(np.abs(depth_warped - current_data['depth']), None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+            #     diff_vis[~valid_comparison_mask] = 0
+            #     diff_colormap = cv2.applyColorMap(diff_vis, cv2.COLORMAP_MAGMA)
+            #     diff_colormap[~valid_comparison_mask] = [0, 0, 0]
+            #     cv2.imwrite(os.path.join(warp_debug_dir, f"{current_data['frame_basename']}_0_depth_curr.png"), depth_curr_vis)
+            #     cv2.imwrite(os.path.join(warp_debug_dir, f"{current_data['frame_basename']}_1_depth_warped_from_{prev_data['frame_basename']}.png"), depth_warped_vis)
+            #     cv2.imwrite(os.path.join(warp_debug_dir, f"{current_data['frame_basename']}_2_depth_diff.png"), diff_colormap)
+            #     cv2.imwrite(os.path.join(warp_debug_dir, f"{current_data['frame_basename']}_3_comparison_mask.png"), valid_comparison_mask.astype(np.uint8)*255)
         else:
              logging.warning(f"Pair ({i-1}, {i}): No valid pose (VGGT Relative) available for depth warping. Skipping depth consistency.")
 
@@ -1752,7 +1603,7 @@ def evaluate_3d_consistency(args):
         # Update previous data state
         prev_data = current_data
 
-    # --- Final Score Calculation (MODIFIED based on new variance metrics) ---
+    # --- Final Score Calculation---
     logging.info(f"Finished processing. Total pairs processed successfully: {processed_pairs_count}/{max(0, num_frames - 1)}")
     if processed_pairs_count == 0:
          logging.error("No frame pairs were successfully processed. Cannot calculate final scores.")
@@ -1762,52 +1613,49 @@ def evaluate_3d_consistency(args):
     local_rot_vars   = all_results['frame_local_consistency_rot_var']
     local_trans_vars = all_results['frame_local_consistency_trans_var']
     reproj           = all_results['frame_reprojection_errors']
-    global_rot_vars  = all_results['frame_global_consistency_rot_var'] # Changed key
-    global_trans_vars= all_results['frame_global_consistency_trans_var']# Changed key
+    global_rot_vars  = all_results['frame_global_consistency_rot_var'] 
+    global_trans_vars= all_results['frame_global_consistency_trans_var']
     depth_err        = all_results['frame_depth_consistency_error']
 
     metrics = {
         'local_rot_var':   local_rot_vars,
         'local_trans_var': local_trans_vars,
         'reproj_error':      reproj,
-        'global_rot_var':    global_rot_vars, # Changed key
-        'global_trans_var':  global_trans_vars,# Changed key
+        'global_rot_var':    global_rot_vars, 
+        'global_trans_var':  global_trans_vars,
         'depth_error':       depth_err,
     }
 
-    # Plotting (Unchanged logic, uses new metric names)
-    sns.set_theme(style="whitegrid")
-    for name, values in metrics.items():
-        # Filter out potential NaNs for plotting if desired, or let seaborn handle them
-        valid_indices = [j for j, v in enumerate(values) if np.isfinite(v)]
-        if not valid_indices:
-            logging.warning(f"No valid data points to plot for metric: {name}")
-            continue
-        valid_values = [values[j] for j in valid_indices]
+    # # Plotting (Unchanged logic, uses new metric names)
+    # sns.set_theme(style="whitegrid")
+    # for name, values in metrics.items():
+    #     # Filter out potential NaNs for plotting if desired, or let seaborn handle them
+    #     valid_indices = [j for j, v in enumerate(values) if np.isfinite(v)]
+    #     if not valid_indices:
+    #         logging.warning(f"No valid data points to plot for metric: {name}")
+    #         continue
+    #     valid_values = [values[j] for j in valid_indices]
 
-        plt.figure(figsize=(10, 4)) # Wider figure
-        sns.lineplot(x=valid_indices, y=valid_values, marker="o", legend=False) # Use valid indices for x-axis
-        # sns.scatterplot(x=valid_indices, y=valid_values, color="red", s=50) # Add scatter points
-        plt.title(f'{name} over Processed Pairs')
-        plt.xlabel('Processed Pair Index (Frame i-1 -> i)') # Clarify x-axis
-        plt.ylabel(name)
-        plt.xlim(left=-1, right=len(values)) # Ensure x-axis shows full range of pairs processed/skipped
-        plt.tight_layout() # Adjust layout
+    #     plt.figure(figsize=(10, 4)) # Wider figure
+    #     sns.lineplot(x=valid_indices, y=valid_values, marker="o", legend=False) # Use valid indices for x-axis
+    #     # sns.scatterplot(x=valid_indices, y=valid_values, color="red", s=50) # Add scatter points
+    #     plt.title(f'{name} over Processed Pairs')
+    #     plt.xlabel('Processed Pair Index (Frame i-1 -> i)') # Clarify x-axis
+    #     plt.ylabel(name)
+    #     plt.xlim(left=-1, right=len(values)) # Ensure x-axis shows full range of pairs processed/skipped
+    #     plt.tight_layout() # Adjust layout
 
-        out_path = os.path.join(plot_debug_dir, f'{name}_over_pairs.png')
-        plt.savefig(out_path, dpi=150, bbox_inches='tight')
-        plt.close()
-        logging.info(f"Saved plot: {out_path}")
+    #     out_path = os.path.join(plot_debug_dir, f'{name}_over_pairs.png')
+    #     plt.savefig(out_path, dpi=150, bbox_inches='tight')
+    #     plt.close()
+    #     logging.info(f"Saved plot: {out_path}")
     
-    # 首先解析 summary.txt（路径可从 args 或硬编码）
-    summary_txt = args.summary_txt_path  # 你需要在 args 中添加这个字段，指向 composite_3d_consistency_summary_pca_weights.txt
+    summary_txt = args.summary_txt_path
     norm_params, pca_weights = parse_summary_file(summary_txt)
 
     frame_pair_scores = []
-    # 对每一个处理过的“帧对索引”i （0 对应帧 1 vs 0，…）
     num_pairs = len(local_rot_vars)
     for idx in range(num_pairs):
-        # 原始值字典
         raw = {
             'average_local_rotation_variance':   local_rot_vars[idx],
             'average_local_translation_variance':local_trans_vars[idx],
@@ -1817,7 +1665,6 @@ def evaluate_3d_consistency(args):
             'average_depth_consistency_error':   depth_err[idx],
         }
 
-        # 计算 m'' 和 S_3DC
         mpp = {}
         num, denom = 0.0, 0.0
         for key in METRIC_KEYS:
@@ -1833,9 +1680,7 @@ def evaluate_3d_consistency(args):
                 mpp[key] = np.nan
                 continue
 
-            # Z-score
             z = 0.0 if σ == 0 else (val - μ) / σ
-            # Min-Max 归一化到 [0,1]
             span = zmax - zmin
             m_val = 0.0 if span == 0 else (z - zmin) / span
             mpp[key] = m_val
@@ -1844,20 +1689,17 @@ def evaluate_3d_consistency(args):
                 num   += w * m_val
                 denom += w
 
-        S3DC = num / denom if denom > 0 else np.nan
-        frame_pair_scores.append(S3DC)
+        STC = num / denom if denom > 0 else np.nan
+        frame_pair_scores.append(STC)
 
-    # 存入 all_results，或打印／写文件都可以
-    all_results['frame_pair_S3DC_scores'] = frame_pair_scores
-    logging.info("每个帧对的 S_3DC 分数计算完毕。")
+    all_results['frame_pair_STC_scores'] = frame_pair_scores
+    logging.info("The STC score for each frame pair is calculated.")
     return all_results
 
 
-# --- Argument Parsing and Main Execution (MODIFIED Args) ---
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate 3D consistency using local variance, global variance vs VGGT, reprojection, and depth.")
 
-    # Input Data Paths (Unchanged)
     parser.add_argument("--frames_dir", type=str, required=True, help="Base directory containing video frame images (subdirs per video).")
     parser.add_argument("--depth_dir", type=str, required=True, help="Base directory containing depth maps (NPZ with 'depths' key, subdirs per video).")
     parser.add_argument("--mos_dir", type=str, required=True, help="Base directory containing Moving Object Segmentation masks (subdirs per video).")
@@ -1865,18 +1707,6 @@ if __name__ == "__main__":
     parser.add_argument("--semantics_dir", type=str, default=None, help="(Optional) Base directory containing semantic segmentation masks (subdirs per video).")
     parser.add_argument("--output_json", type=str, default="consistency_results_globalvar.json", help="Path to save the final results JSON file (will be prefixed with video name).")
     parser.add_argument("--video_name", type=str, required=True, help="Name of the video subdirectory to process.")
-
-    # # Configuration Parameters (Unchanged, added SLIC args)
-    # parser.add_argument("--depth_scale", type=float, default=1000.0, help="Factor to divide raw integer depth values by. Use 1.0 or 0 if depth is already metric or relative float.")
-    # # parser.add_argument("--segmentation_method", type=str, default="depth_aware_slic", choices=["depth_aware_slic"], help="Segmentation method (only depth-aware SLIC currently implemented).") # Simplified choice
-    # parser.add_argument("--static_semantic_labels", type=int, nargs='+', default=[1, 2, 5], help="List of semantic labels considered static (used if semantics_dir provided).")
-    # parser.add_argument("--n_slic_segments", type=int, default=20, help="Approximate number of SLIC superpixels for Depth-Aware SLIC.") # Increased default
-    # parser.add_argument("--slic_compactness", type=float, default=5.0, help="Compactness parameter for SLIC.")
-    # parser.add_argument("--depth_aware_slic_weight", type=float, default=5.0, help="Weight for depth channel in depth-aware SLIC.")
-    # parser.add_argument("--slic_sigma", type=float, default=1.0, help="Sigma for Gaussian smoothing before SLIC (0 to disable).")
-    # parser.add_argument("--min_segment_size", type=int, default=200, help="Minimum pixel count for a segment to be considered.") # Reduced default
-    # parser.add_argument("--pnp_reprojection_error", type=float, default=5.0, help="RANSAC reprojection error threshold for PnP (pixels).") # Reduced default
-    # parser.add_argument("--min_track_confidence", type=float, default=0.5, help="Minimum confidence score for a track point to be used.")
 
     # Configuration Parameters
     parser.add_argument("--depth_scale", type=float, default=1000.0, help="Factor to divide raw depth values by (e.g., 1000.0 for mm to meters). Set <= 0 to use raw values.")
@@ -1889,7 +1719,6 @@ if __name__ == "__main__":
     parser.add_argument("--pnp_reprojection_error", type=float, default=8.0, help="RANSAC reprojection error threshold for PnP (pixels).")
     parser.add_argument("--min_track_confidence", type=float, default=0.5, help="Minimum confidence score (from tracks_file[:,:,3]) for a track point to be used (applied to current frame). Default 0.0 uses all visible.")
 
-
     # Normalization and Scoring Parameters (MODIFIED global params)
     parser.add_argument("--norm_max_local_rot_var", type=float, default=10.0, help="Max expected LOCAL rotation variance (deg^2) for normalization.")
     parser.add_argument("--norm_max_local_trans_var", type=float, default=0.5, help="Max expected LOCAL normalized translation variance for normalization.")
@@ -1899,17 +1728,17 @@ if __name__ == "__main__":
     parser.add_argument("--norm_max_depth_err", type=float, default=0.5, help="Max expected depth consistency error (in depth units after scaling) for normalization.")
     parser.add_argument("--final_score_weights", type=float, nargs=4, default=[0.1, 0.1, 0.4, 0.4], metavar=('W_LCON', 'W_REPR', 'W_GCON', 'W_DEPT'), help="Weights for [LocalCons, Reproj, GlobalCons, DepthCons] in final score.") # Updated help text
 
-    # VGGT Configuration (Unchanged)
+    # VGGT Configuration 
     parser.add_argument("--vggt_model_name", type=str, default="facebook/VGGT-1B", help="Name of the VGGT model to load from Hugging Face.")
 
-    # Debugging (Unchanged)
+    # Debugging 
     parser.add_argument("--debug_vis_interval", type=int, default=0, help="Interval (in frames) for saving debug visualizations. 0 to disable.")
     
     parser.add_argument("--summary_txt_path", type=str, default="stc/composite_3d_consistency_summary_pca_weights.txt", help="Path to the summary file containing normalization parameters and PCA weights.")
 
     args = parser.parse_args()
 
-    # Validate weights length and sum (Unchanged)
+    # Validate weights length and sum 
     if len(args.final_score_weights) != 4:
         raise ValueError("final_score_weights must have exactly 4 values.")
     if sum(args.final_score_weights) <= 1e-6:
@@ -1920,14 +1749,14 @@ if __name__ == "__main__":
     video_name = args.video_name
     logging.info(f"===== Evaluating Video: {video_name} =====")
 
-    # Construct full paths based on video name (Unchanged)
+    # Construct full paths based on video name 
     current_frames_dir = os.path.join(args.frames_dir, video_name)
     current_depth_dir = os.path.join(args.depth_dir, video_name)
     current_mos_dir = os.path.join(args.mos_dir, video_name)
     current_tracks_dir = os.path.join(args.tracks_dir, video_name)
     current_semantics_dir = os.path.join(args.semantics_dir, video_name) if args.semantics_dir else None
 
-    # Check if essential directories exist (Unchanged)
+    # Check if essential directories exist 
     if not os.path.isdir(current_frames_dir): logging.error(f"Frames directory not found: {current_frames_dir}"); exit()
     if not os.path.isdir(current_depth_dir): logging.error(f"Depth directory not found: {current_depth_dir}"); exit()
     if not os.path.isdir(current_mos_dir): current_mos_dir = None
@@ -1935,7 +1764,7 @@ if __name__ == "__main__":
     if args.semantics_dir and current_semantics_dir and not os.path.isdir(current_semantics_dir): logging.warning(f"Semantics directory specified but not found: {current_semantics_dir}")
 
 
-    # Create a copy of args to modify paths for the function call (Unchanged)
+    # Create a copy of args to modify paths for the function call 
     video_args = argparse.Namespace(**vars(args))
     video_args.frames_dir = current_frames_dir
     video_args.depth_dir = current_depth_dir
@@ -1950,12 +1779,12 @@ if __name__ == "__main__":
         args.output_json = os.path.join('result','score',video_name_top,f"{video_name}.txt")
         if results:
             with open(args.output_json, 'w', encoding='utf-8') as f:
-                f.write("Pair_Index\tS_3DC_score\n")
-                for idx, s in enumerate(results['frame_pair_S3DC_scores']):
+                f.write("Pair_Index\tSTC_score\n")
+                for idx, s in enumerate(results['frame_pair_STC_scores']):
                     score_str = f"{s:.6f}" if not np.isnan(s) else "N/A"
                     f.write(f"{idx}\t{score_str}\n")
-                f.write(f"Final_S3DC_score\t{np.nanmean(results['frame_pair_S3DC_scores']):.6f}\n")
-            logging.info(f"Saved per-pair S_3DC scores → {args.output_json}")
+                f.write(f"Final_STC_score\t{np.nanmean(results['frame_pair_STC_scores']):.6f}\n")
+            logging.info(f"Saved per-pair STC scores → {args.output_json}")
 
 
     except Exception as e:

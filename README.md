@@ -79,12 +79,12 @@ You have two options for providing your own video data:
 
 **2. Structure for Datasets Used in Our Experiments:**
 
-The following shows an example of how datasets were organized for the experiments reported in our paper (e.g., K400-val, NuScenes). If you intend to reproduce our results or use any provided evaluation scripts for these specific benchmarks, your data might need to follow a similar structure:
+The following shows an example of how datasets were organized for the experiments reported in our paper (e.g., rtx, NuScenes). If you intend to reproduce our results or use any provided evaluation scripts for these specific benchmarks, your data might need to follow a similar structure:
 
 ```
 
 evaluation_datasets/
-├── k400-val/
+├── rtx/
 │   ├── cosmos/             \# Sub-category, model outputs, or specific split
 │   │   ├── images/
 │   │   │   ├── cosmos_0001/ \# This could be a folder of frames or a single video file
@@ -98,7 +98,7 @@ evaluation_datasets/
 |   │   │   └── ...
 │   ├── latte/
 │   │   └── ...
-│   └── ...                 \# Other categories or models evaluated on k400-val
+│   └── ...                 \# Other categories or models evaluated on rtx
 ├── nuscenes/
 └── ...                     \# Other benchmark datasets
 
