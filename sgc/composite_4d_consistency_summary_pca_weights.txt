@@ -1,0 +1,68 @@
+Composite 4D Consistency Score (SGC): Lower is better.
+Normalization: Z-score standardization, then Min-Max scaling of Z-scores to [0 (best), 1 (worst)].
+
+--- Normalization Parameters Used (calculated from the processed datasets) ---
+{
+  "average_local_rotation_variance": {
+    "mu_raw": 29.486968696050024,
+    "sigma_raw": 20.647540625782288,
+    "z_score_min": -1.1122217478147371,
+    "z_score_max": 1.8568113437343219
+  },
+  "average_local_translation_variance": {
+    "mu_raw": 165.28804923133268,
+    "sigma_raw": 404.40908019807654,
+    "z_score_min": -0.4086823216966401,
+    "z_score_max": 3.0423945538112873
+  },
+  "average_reprojection_error": {
+    "mu_raw": 3.038539530140096,
+    "sigma_raw": 1.1119998491616334,
+    "z_score_min": -1.5344424794921168,
+    "z_score_max": 1.846424860649412
+  },
+  "average_global_rotation_variance": {
+    "mu_raw": 27.399651932407547,
+    "sigma_raw": 38.276671152522155,
+    "z_score_min": -0.6671813642171066,
+    "z_score_max": 2.9908104428622018
+  },
+  "average_global_translation_variance": {
+    "mu_raw": 202.63064742098325,
+    "sigma_raw": 472.8344508501568,
+    "z_score_min": -0.4285114020069414,
+    "z_score_max": 2.8512390392664937
+  },
+  "average_depth_consistency_error": {
+    "mu_raw": 0.0583742826077106,
+    "sigma_raw": 0.03552371454009291,
+    "z_score_min": -1.0266869108139405,
+    "z_score_max": 1.7668896968471635
+  }
+}
+
+--- PCA-Derived Weights ---
+Calculated PCA Weights: {
+  "average_local_rotation_variance": 0.17534689577014462,
+  "average_local_translation_variance": 0.18977158801475327,
+  "average_reprojection_error": 0.013883616022815454,
+  "average_global_rotation_variance": 0.12266690459575098,
+  "average_global_translation_variance": 0.207699107887349,
+  "average_depth_consistency_error": 0.29063188770918663
+}
+
+--- Detailed Results Table ---
+Rank  | Dataset                   | SGC Score     | JSONs   | LRotVar    | LTransVar  | ReprErr    | GRotVar    | GTransVar  | DepthCons  | NormLRotV  | NormLTraV  | NormRepEr  | NormGRotV  | NormGTraV  | NormDepCo 
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+1     | rtx                       | 0.0448          | 100     | 16.2475    | 0.0132     | 1.3322     | 3.2045     | 0.0157     | 0.0273     | 0.159      | 0.000      | 0.000      | 0.010      | 0.000      | 0.055     
+2     | nuscenes                  | 0.0468          | 100     | 6.5223     | 0.0182     | 5.0918     | 2.0900     | 0.0220     | 0.0331     | 0.000      | 0.000      | 1.000      | 0.002      | 0.000      | 0.113     
+3     | opensora-t                | 0.0609          | 70      | 10.9142    | 0.5431     | 3.5698     | 2.5246     | 0.6043     | 0.0353     | 0.072      | 0.000      | 0.595      | 0.005      | 0.000      | 0.135     
+4     | videocrafter              | 0.1090          | 125     | 19.1510    | 0.0199     | 2.2943     | 1.8622     | 0.0231     | 0.0456     | 0.206      | 0.000      | 0.256      | 0.000      | 0.000      | 0.239     
+5     | lavie                     | 0.1202          | 127     | 13.6334    | 0.1062     | 2.1607     | 4.0182     | 0.1217     | 0.0543     | 0.116      | 0.000      | 0.220      | 0.015      | 0.000      | 0.327     
+6     | zeroscope                 | 0.1247          | 87      | 24.1181    | 0.3708     | 2.0530     | 56.9313    | 0.4241     | 0.0299     | 0.287      | 0.000      | 0.192      | 0.393      | 0.000      | 0.080     
+7     | hotshot                   | 0.1583          | 105     | 28.4705    | 0.0245     | 2.9657     | 4.2799     | 0.0292     | 0.0517     | 0.358      | 0.000      | 0.434      | 0.017      | 0.000      | 0.301     
+8     | opensora-i                | 0.1669          | 78      | 25.3921    | 1.2944     | 3.6656     | 31.0265    | 1.4864     | 0.0487     | 0.308      | 0.001      | 0.621      | 0.208      | 0.001      | 0.270     
+9     | cosmos                    | 0.1763          | 65      | 57.1811    | 0.0524     | 3.7108     | 27.6865    | 0.0591     | 0.0219     | 0.826      | 0.000      | 0.633      | 0.184      | 0.000      | 0.000     
+10    | latte                     | 0.6011          | 118     | 67.8256    | 0.0906     | 4.6934     | 141.8779   | 0.1423     | 0.1211     | 1.000      | 0.000      | 0.894      | 1.000      | 0.000      | 1.000     
+11    | modelscope                | 0.6719          | 118     | 65.6855    | 585.2632   | 1.7989     | 24.2648    | 877.8452   | 0.1189     | 0.965      | 0.419      | 0.124      | 0.160      | 0.566      | 0.978     
+12    | seine                     | 0.7284          | 108     | 18.7023    | 1395.6600  | 3.1263     | 29.0294    | 1550.7947  | 0.1126     | 0.199      | 1.000      | 0.477      | 0.194      | 1.000      | 0.914     

@@ -1,25 +1,25 @@
-# Measuring 4D Spatial-Temporal Consistency in Generated Videos
+# Measuring 3D Spatial Geometric Consistency in Dynamically Generated Videos
 
 ---
 
 <p align="center">
-  <img src="assets/overview.png" alt="Overview of STC Pipeline" width="700"/>
+  <img src="assets/overview.pdf" alt="Overview of SGC Pipeline" width="700"/>
 </p>
 <p align="center">
-  <em>Overview of the STC computation pipeline. Input RGB frames undergo parallel processing: (i) depth estimation, leading to dense point reconstruction for global camera pose estimation; and (ii) pixel tracking followed by motion segmentation to isolate moving objects. The identified static background is then adaptively segmented. Local camera poses for these static sub-regions are subsequently estimated using information from pixel tracks and depth. Finally, the overall STC score is computed by aggregating four key evaluations: local inter-segment consistency, global pose consistency (comparing local estimates against the global camera motion), reprojection error, and cross-frame depth consistency.</em>
+  <em>Overview of the SGC computation pipeline. Input RGB frames undergo parallel processing: (i) depth estimation, leading to dense point reconstruction for global camera pose estimation; and (ii) pixel tracking followed by motion segmentation to isolate moving objects. The identified static background is then adaptively segmented. Local camera poses for these static sub-regions are subsequently estimated using information from pixel tracks and depth. Finally, the overall SGC score is computed by aggregating four key evaluations: local inter-segment consistency, global pose consistency (comparing local estimates against the global camera motion), reprojection error, and cross-frame depth consistency.</em>
 </p>
 
 ---
 
 ## 📝 Contents
 
-- [Measuring 4D Spatial-Temporal Consistency in Generated Videos](#measuring-4d-spatial-temporal-consistency-in-generated-videos)
+- [Measuring 3D Spatial Geometric Consistency in Dynamically Generated Videos](#measuring-3d-spatial-geometric-consistency-in-dynamically-generated-videos)
   - [📝 Contents](#-contents)
   - [📄 Abstract](#-abstract)
   - [🛠️ Installation](#️-installation)
   - [🚀 Usage](#-usage)
     - [Data Preparation](#data-preparation)
-    - [Running STC Metric](#running-stc-metric)
+    - [Running SGC Metric](#running-sgc-metric)
   - [📊 Evaluation](#-evaluation)
     - [Evaluation Setup](#evaluation-setup)
     - [Datasets](#datasets)
@@ -29,7 +29,7 @@
 
 ## 📄 Abstract
 
-We introduce STC, a metric for evaluating 4D **S**patio-**T**emporal **C**onsistency in generated videos. With the rapid development of video generation models, the visual quality of synthetic videos has improved reached an extent of being almost visually indistinguishable from real videos. Despite performing well on conventional video quality assessment metrics (e.g., FVD), most existing methods still cannot generate videos with perfect spatial-temporal consistency. However, it lacks a quantitative definition and computationally feasible metric to measure the level of spatial-temporal consistency in videos. To address this, we propose to measure spatial-temporal consistency by the variance of camera poses computed by different regions across frames. Specifically, we first establish correspondence between pixels in all the frames and disentangle dynamic and static regions. We then predict depth for each pixel to obtain 3D dense points for each frame. With the point-wise correspondence and dynamics segmentation, we divide the points into subgroups and estimate a sequence of poses for each subgroup. Finally, we compute various metrics to measure the pose variance between different regions and combine them to define the overall STC metric. We compare different metric on both generated and real videos. Experimental results demonstrate that the proposed STC can well differentiate them, showing the practical application of STC for evaluating video quality.
+Recent generative models can produce high-fidelity videos, yet they often exhibit 3D spatial geometric inconsistencies. Existing evaluation methods fail to accurately characterize these inconsistencies: fidelity-centric metrics like FVD are insensitive to geometric distortions, while consistency-focused benchmarks often penalize valid foreground dynamics. To address this gap, we introduce SGC, a metric for evaluating 3D **S**patial **G**eometric **C**onsistency in dynamically generated videos. We quantify geometric consistency by measuring the divergence among multiple camera poses estimated from distinct local regions. Our approach first separates static from dynamic regions, then partitions the static background into spatially coherent sub-regions. We predict depth for each pixel and estimate a local camera pose for each subregion and compute the divergence among these poses to quantify geometric consistency. Experiments on real and generative videos demonstrate that SGC robustly quantifies geometric inconsistencies, effectively identifying critical failures missed by existing metrics.
 
 ---
 
@@ -45,7 +45,7 @@ Please see `docs/Install.md` for a comprehensive guide on setting up the environ
 
 ### Data Preparation
 
-Our STC metric can process video files directly or pre-extracted frames. Please organize your data as described below.
+Our SGC metric can process video files directly or pre-extracted frames. Please organize your data as described below.
 
 **1. For Your Custom Videos/Frames:**
 
@@ -104,23 +104,23 @@ evaluation_datasets/
 
 ```
 
-### Running STC Metric
+### Running SGC Metric
 
 ```bash
 bash scripts/run_seganymo.sh
-bash scripts/run_stc.sh
+bash scripts/run_sgc.sh
 ```
 
 ---
 
 ## 📊 Evaluation
 
-This section outlines the experimental setup, datasets, and key findings from the evaluation of our STC metric, as detailed in our paper.
+This section outlines the experimental setup, datasets, and key findings from the evaluation of our SGC metric, as detailed in our paper.
 
 ### Evaluation Setup
 
 **Video Generation Models:**
-To comprehensively assess 4D spatio-temporal consistency, we evaluated STC using a diverse set of AI-generated videos. These videos were produced by 10 distinct generative models, spanning three main categories:
+To comprehensively assess 4D spatio-temporal consistency, we evaluated SGC using a diverse set of AI-generated videos. These videos were produced by 10 distinct generative models, spanning three main categories:
 
 - **Text-to-Video (T2V):** Models such as Latte (Ma et al., 2024), ZeroScope (zeroscope2024), ModelScope (Wang et al., 2023), VideoCrafter2 (Chen et al., 2024), HotShot (hotshot2023), LaVie (Wang et al., 2025), and OpenSora (Zheng et al., 2024). These models synthesize novel content and motion from textual descriptions.
 - **Image-to-Video (I2V):** Models like SEINE (Chen et al., 2023) and OpenSora (Zheng et al., 2024), which animate static images.
@@ -144,11 +144,11 @@ Our evaluation dataset comprises both real-world and AI-generated videos:
 
 ### Key Results and Comparisons
 
-Our experiments demonstrate STC's effectiveness in quantifying 4D spatio-temporal consistency:
+Our experiments demonstrate SGC's effectiveness in quantifying 4D spatio-temporal consistency:
 
-- **Differentiating Real vs. Generated Content:** STC consistently assigns its lowest (best) scores to real-world videos, effectively distinguishing them from AI-generated videos. The following table presents the STC scores (lower is better) for various generative models and real-world datasets from our evaluations:
+- **Differentiating Real vs. Generated Content:** SGC consistently assigns its lowest (best) scores to real-world videos, effectively distinguishing them from AI-generated videos. The following table presents the SGC scores (lower is better) for various generative models and real-world datasets from our evaluations:
 
-  | Method              | STC Score (↓) |
+  | Method              | SGC Score (↓) |
   | ------------------- | ------------- |
   | Cosmos              | 0.1763        |
   | Hotshot             | 0.1583        |
@@ -163,4 +163,4 @@ Our experiments demonstrate STC's effectiveness in quantifying 4D spatio-tempora
   | **RT-1 (Real)**     | **0.0448**    |
   | **Nuscenes (Real)** | **0.0468**    |
 
-  These scores highlight STC's ability to discern high spatio-temporal consistency in authentic sequences, with RT-1 and Nuscenes achieving the best STC scores. Full quantitative comparisons, including MEt3R and FVD metrics for all listed methods, can be found in Table 2 of our paper.
+  These scores highlight SGC's ability to discern high spatio-temporal consistency in authentic sequences, with RT-1 and Nuscenes achieving the best SGC scores. Full quantitative comparisons, including MEt3R and FVD metrics for all listed methods, can be found in Table 2 of our paper.

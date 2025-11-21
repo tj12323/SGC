@@ -1,11 +1,11 @@
 # Installation Guide
 
-This guide provides step-by-step instructions to set up the STC project and its dependencies.
+This guide provides step-by-step instructions to set up the SGC project and its dependencies.
 
 **Tested Environment:**
 
 - **OS:** Ubuntu 22.04
-- **Python:** 3.12 (for STC main environment), 3.10 (for DELTA environment)
+- **Python:** 3.12 (for SGC main environment), 3.10 (for DELTA environment)
 - **PyTorch:** 2.4.0 (with CUDA 11.8)
 - **GPU:** NVIDIA RTX 3090 (or similar with sufficient VRAM)
 
@@ -13,20 +13,20 @@ While other setups might work, the code has been primarily tested with these spe
 
 ## 1. Clone the Repository
 
-First, clone the STC repository and navigate into the directory. If the third-party libraries are included as Git submodules, initialize them:
+First, clone the SGC repository and navigate into the directory. If the third-party libraries are included as Git submodules, initialize them:
 
 ```bash
-cd STC
+cd SGC
 git submodule update --init --recursive
 ```
 
-## 2. Main STC Environment Setup
+## 2. Main SGC Environment Setup
 
-This environment will be used for running the core STC metric.
+This environment will be used for running the core SGC metric.
 
 ```bash
-conda create -n stc python=3.12.4 -y
-conda activate stc
+conda create -n sgc python=3.12.4 -y
+conda activate sgc
 
 # Install PyTorch (ensure this matches your CUDA version)
 pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/cu118
@@ -89,7 +89,7 @@ Choose one method to download:
 - **Configuration:** After downloading, you may need to update the checkpoint path in `configs/example_train.yaml` (relative to the `SegAnyMo` directory). Specifically, set the `resume_path` variable.
 
 ```bash
-cd ../.. # Back to STC root directory
+cd ../.. # Back to SGC root directory
 ```
 
 ---
@@ -102,7 +102,7 @@ cd ../.. # Back to STC root directory
 **A. Create DELTA Environment and Install Dependencies:**
 
 ```bash
-cd third-party/DenseTrack3D # Ensure you are in STC/third-party/DenseTrack3D
+cd third-party/DenseTrack3D # Ensure you are in SGC/third-party/DenseTrack3D
 
 conda create -n densetrack3d python=3.10 cmake=3.14.0 -y
 conda activate densetrack3d
@@ -118,7 +118,7 @@ pip install -U "ray[default]"
 
 ```bash
 pip install ninja
-# Unidepth requires a specific xformers version, different from the main 'stc' env.
+# Unidepth requires a specific xformers version, different from the main 'sgc' env.
 pip install "git+https://github.com/facebookresearch/pytorch3d.git@stable"
 # Alternative for PyTorch3D if issues:
 # cd submodules/UniDepth/unidepth/ops/knn/src && bash compile.sh && cd ../../../../../../
@@ -132,11 +132,11 @@ mkdir -p ./checkpoints/
 gdown --fuzzy https://drive.google.com/file/d/1S_T7DzqBXMtr0voRC_XUGn1VTnPk_7Rm/view?usp=sharing -O ./checkpoints/
 ```
 
-- **Important:** When you need to run DELTA's processing scripts, make sure to activate its environment: `conda activate densetrack3d`. For STC, use `conda activate stc`.
+- **Important:** When you need to run DELTA's processing scripts, make sure to activate its environment: `conda activate densetrack3d`. For SGC, use `conda activate sgc`.
 
 ```bash
-cd ../.. # Back to STC root directory
-conda activate stc # Switch back to the main STC environment
+cd ../.. # Back to SGC root directory
+conda activate sgc # Switch back to the main SGC environment
 ```
 
 ---
@@ -148,7 +148,7 @@ conda activate stc # Switch back to the main STC environment
 **A. Install Dependencies:**
 
 ```bash
-cd third-party/Video-Depth-Anything # Ensure you are in STC/third-party/Video-Depth-Anything
+cd third-party/Video-Depth-Anything # Ensure you are in SGC/third-party/Video-Depth-Anything
 pip install -r requirements.txt
 ```
 
@@ -170,7 +170,7 @@ bash get_weights.sh
 ```
 
 ```bash
-cd ../.. # Back to STC root directory
+cd ../.. # Back to SGC root directory
 ```
 
 ---
@@ -188,4 +188,4 @@ pip install -e .
 
 ---
 
-After completing all the above steps, your STC project and all specified third-party dependencies should be ready for use. Remember to activate the correct Conda environment (e.g., stc for the main project and most dependencies, or densetrack3d specifically for DELTA processing) depending on which part of the project you are working with.
+After completing all the above steps, your SGC project and all specified third-party dependencies should be ready for use. Remember to activate the correct Conda environment (e.g., sgc for the main project and most dependencies, or densetrack3d specifically for DELTA processing) depending on which part of the project you are working with.
