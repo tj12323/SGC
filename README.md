@@ -3,7 +3,7 @@
 ---
 
 <p align="center">
-  <img src="assets/overview.pdf" alt="Overview of SGC Pipeline" width="700"/>
+  <img src="assets/overview.png" alt="Overview of SGC Pipeline" width="700"/>
 </p>
 <p align="center">
   <em>Overview of the SGC computation pipeline. Input RGB frames undergo parallel processing: (i) depth estimation, leading to dense point reconstruction for global camera pose estimation; and (ii) pixel tracking followed by motion segmentation to isolate moving objects. The identified static background is then adaptively segmented. Local camera poses for these static sub-regions are subsequently estimated using information from pixel tracks and depth. Finally, the overall SGC score is computed by aggregating four key evaluations: local inter-segment consistency, global pose consistency (comparing local estimates against the global camera motion), reprojection error, and cross-frame depth consistency.</em>
