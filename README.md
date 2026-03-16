@@ -95,7 +95,7 @@ The output will be saved as a JSON file containing the overall SGC score and the
 ## 📊 Evaluation Results
 
 
-We curate a comprehensive benchmark of 1,296 videos, comprising 1,196 generated videos and 100 high-motion web videos. Experiments on real and generative videos demonstrate that SGC robustly quantifies geometric inconsistencies, effectively identifying critical failures missed by existing metrics.
+We curate a comprehensive benchmark of 1,296 videos, comprising 996 generated videos and 300 high-motion real videos. Experiments on real and generative videos demonstrate that SGC robustly quantifies geometric inconsistencies, effectively identifying critical failures missed by existing metrics.
 
 
 | Method              | SGC Score (↓) |
