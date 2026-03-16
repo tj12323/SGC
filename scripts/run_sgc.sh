@@ -50,7 +50,7 @@ for parent_dir in "${MAIN_BASE_DIR}"/*; do
                                 --n_depth_clusters 10
                                 # --segmentation_method "grid"
                             
-                            local exit_status=$? # 捕获python脚本的退出状态
+                            exit_status=$? # 捕获python脚本的退出状态
                             if [ $exit_status -ne 0 ]; then
                                 echo "  [GPU ${current_gpu_id}] ERROR: Task for ${video_name} failed with status ${exit_status}."
                             else
