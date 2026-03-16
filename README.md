@@ -17,14 +17,14 @@
 ---
 **Table of Contents**
 
-- [🧠 Overview](#-overview)
-  - [Key Features](#key-features)
-- [🛠️ Installation](#️-installation)
-- [🚀 Usage](#-usage)
-  - [Data Preparation](#data-preparation)
-  - [Running the Evaluation](#running-the-evaluation)
-- [📊 Evaluation Results](#-evaluation-results)
-- [🙏 Acknowledgments](#-acknowledgments)
+* [🧠 Overview](#-overview)
+  * [Key Features](#key-features)
+* [🛠️ Installation](#️-installation)
+* [🚀 Usage](#-usage)
+  * [Data Preparation](#data-preparation)
+  * [Running the Evaluation](#running-the-evaluation)
+* [📊 Evaluation Results](#-evaluation-results)
+* [🙏 Acknowledgments](#-acknowledgments)
 ---
 
 ## 🧠 Overview
