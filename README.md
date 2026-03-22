@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![arXiv](https://img.shields.io/badge/arXiv-Paper-<COLOR>.svg)](https://arxiv.org/abs/<YOUR_LINK>)
+[![arXiv](https://img.shields.io/badge/arXiv-Paper-<COLOR>.svg)](https://arxiv.org/abs/2603.19048)
 [![GitHub](https://img.shields.io/badge/GitHub-Code-black.svg)](https://github.com/tj12323/SGC)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -24,6 +24,7 @@
   * [Data Preparation](#data-preparation)
   * [Running the Evaluation](#running-the-evaluation)
 * [📊 Evaluation Results](#-evaluation-results)
+* [📄 Citation](#-citation)
 * [🙏 Acknowledgments](#-acknowledgments)
 ---
 
@@ -115,6 +116,23 @@ We curate a comprehensive benchmark of 1,296 videos, comprising 996 generated vi
 | **OpenVid (Real)**  | **0.0530**    |
 
 (For full quantitative comparisons across all 10 state-of-the-art models, please refer to Table 1 in our paper ). 
+
+---
+## 📄 Citation
+
+If you find our metric or code useful in your research, please consider citing our paper:
+
+```bibtex
+@misc{dou2026measuring3dspatialgeometric,
+      title={Measuring 3D Spatial Geometric Consistency in Dynamic Generated Videos}, 
+      author={Weijia Dou and Wenzhao Zheng and Weiliang Chen and Yu Zheng and Jie Zhou and Jiwen Lu},
+      year={2026},
+      eprint={2603.19048},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2603.19048}, 
+}
+```
 
 ---
 
