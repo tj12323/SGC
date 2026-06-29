@@ -4,6 +4,7 @@
 
 [![arXiv](https://img.shields.io/badge/arXiv-Paper-<COLOR>.svg)](https://arxiv.org/abs/2603.19048)
 [![GitHub](https://img.shields.io/badge/GitHub-Code-black.svg)](https://github.com/tj12323/SGC)
+[![Dataset](https://img.shields.io/badge/Dataset-Google%20Drive-orange.svg)](https://drive.google.com/drive/folders/1Id54gbTrUjhf8PdAdI9qBEYqzyS5AryS?usp=drive_link)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 [Weijia Dou](https://tj12323.github.io/)<sup>1*</sup>, [Wenzhao Zheng](https://wzzheng.net/)<sup>2,3*,†</sup>, [Weiliang Chen](https://chen-wl20.github.io/)<sup>2</sup>, [Yu Zheng](https://yzheng97.github.io/)<sup>2</sup>, [Jie Zhou](https://scholar.google.com/citations?user=6a79aPwAAAAJ&hl=en&authuser=1)<sup>2</sup>, [Jiwen Lu](http://ivg.au.tsinghua.edu.cn/Jiwen_Lu/)<sup>2</sup>
@@ -96,7 +97,10 @@ The output will be saved as a JSON file containing the overall SGC score and the
 ## 📊 Evaluation Results
 
 
-We curate a comprehensive benchmark of 1,296 videos, comprising 996 generated videos and 300 high-motion real videos. Experiments on real and generative videos demonstrate that SGC robustly quantifies geometric inconsistencies, effectively identifying critical failures missed by existing metrics.
+We provide our curated benchmark of 1,296 videos (comprising 996 generated videos and 300 real videos). You can download the dataset (sampled videos) via the link below:
+* **[Google Drive (Sampled Videos)](https://drive.google.com/drive/folders/1Id54gbTrUjhf8PdAdI9qBEYqzyS5AryS?usp=drive_link)**
+
+Experiments on real and generative videos demonstrate that SGC robustly quantifies geometric inconsistencies, effectively identifying critical failures missed by existing metrics.
 
 
 | Method              | SGC Score (↓) |
