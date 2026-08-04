@@ -1,4 +1,4 @@
-# [ECCV 2026] Measuring 3D Spatial Geometric Consistency in Dynamically Generated Videos
+# <h1 align="center">[ECCV 2026] Measuring 3D Spatial Geometric Consistency in Dynamic Video Generation</h1>
 
 <div align="center">
 
