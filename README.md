@@ -1,4 +1,4 @@
-# Measuring 3D Spatial Geometric Consistency in Dynamically Generated Videos
+# [ECCV 2026] Measuring 3D Spatial Geometric Consistency in Dynamically Generated Videos
 
 <div align="center">
 
@@ -7,11 +7,11 @@
 [![Dataset](https://img.shields.io/badge/Dataset-Google%20Drive-orange.svg)](https://drive.google.com/drive/folders/1Id54gbTrUjhf8PdAdI9qBEYqzyS5AryS?usp=drive_link)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-[Weijia Dou](https://tj12323.github.io/)<sup>1*</sup>, [Wenzhao Zheng](https://wzzheng.net/)<sup>2,3*,†</sup>, [Weiliang Chen](https://chen-wl20.github.io/)<sup>2</sup>, [Yu Zheng](https://yzheng97.github.io/)<sup>2</sup>, [Jie Zhou](https://scholar.google.com/citations?user=6a79aPwAAAAJ&hl=en&authuser=1)<sup>2</sup>, [Jiwen Lu](http://ivg.au.tsinghua.edu.cn/Jiwen_Lu/)<sup>2</sup>
+[Weijia Dou](https://tj12323.github.io/)<sup>1,2*</sup>, [Wenzhao Zheng](https://wzzheng.net/)<sup>1,2*,†</sup>, [Weiliang Chen](https://chen-wl20.github.io/)<sup>1</sup>, [Yu Zheng](https://yzheng97.github.io/)<sup>1</sup>, [Jie Zhou](https://scholar.google.com/citations?user=6a79aPwAAAAJ&hl=en&authuser=1)<sup>1</sup>, [Jiwen Lu](http://ivg.au.tsinghua.edu.cn/Jiwen_Lu/)<sup>1</sup>
 
 <small>(*Equal contribution; †Project leader.)</small>
 
-<sup>1</sup>Tongji University &nbsp;&nbsp; <sup>2</sup>Tsinghua University &nbsp;&nbsp; <sup>3</sup>University of California, Berkeley
+<sup>1</sup>Tsinghua University &nbsp;&nbsp; <sup>2</sup>Tongji University &nbsp;&nbsp; <sup>3</sup>University of California, Berkeley
 
 </div>
 
