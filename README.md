@@ -127,14 +127,20 @@ Experiments on real and generative videos demonstrate that SGC robustly quantifi
 If you find our metric or code useful in your research, please consider citing our paper:
 
 ```bibtex
-@misc{dou2026measuring3dspatialgeometric,
-      title={Measuring 3D Spatial Geometric Consistency in Dynamic Generated Videos}, 
-      author={Weijia Dou and Wenzhao Zheng and Weiliang Chen and Yu Zheng and Jie Zhou and Jiwen Lu},
-      year={2026},
-      eprint={2603.19048},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV},
-      url={https://arxiv.org/abs/2603.19048}, 
+@InProceedings{dou2026measuring3dspatialgeometric,
+author="Dou, Weijia
+and Zheng, Wenzhao
+and Chen, Weiliang
+and Zheng, Yu
+and Zhou, Jie
+and Lu, Jiwen",
+title="Measuring 3D Spatial Geometric Consistency in Dynamic Video Generation",
+booktitle="Computer Vision -- ECCV 2026",
+year="2026",
+publisher="Springer Nature Switzerland",
+address="Cham",
+pages="130--148",
+isbn="978-3-032-36846-1"
 }
 ```
 
